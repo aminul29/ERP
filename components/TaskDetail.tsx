@@ -1,0 +1,383 @@
+
+import React, { useState, useMemo, useEffect } from 'react';
+import { Task, Project, Client, Teammate, Comment, PendingUpdate, TaskStatus, TaskPriority } from '../types';
+import { Card } from './ui/Card';
+import { Badge } from './ui/Badge';
+import { StarRating } from './ui/StarRating';
+import { ICONS } from '../constants';
+import { Modal } from './ui/Modal';
+
+const statusColors: { [key in TaskStatus]: 'gray' | 'blue' | 'green' } = {
+  [TaskStatus.ToDo]: 'gray',
+  [TaskStatus.InProgress]: 'blue',
+  [TaskStatus.Done]: 'green',
+};
+
+const priorityColors: { [key in TaskPriority]: 'green' | 'yellow' | 'red' } = {
+  [TaskPriority.Low]: 'green',
+  [TaskPriority.Medium]: 'yellow',
+  [TaskPriority.High]: 'red',
+};
+
+const formatTime = (totalSeconds: number): string => {
+    if (totalSeconds < 0) totalSeconds = 0;
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = Math.floor(totalSeconds % 60);
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
+const renderValue = (key: string, value: any) => {
+    if (value === undefined || value === null || value === '') return <span className="italic text-gray-500">empty</span>;
+    if (Array.isArray(value)) return `[${value.join(', ')}]`;
+    if (typeof value === 'boolean') return value ? 'true' : 'false';
+    if (key === 'deadline' && typeof value === 'string') return new Date(value).toLocaleDateString();
+    return String(value);
+};
+
+const timeAgo = (timestamp: string) => {
+    const now = new Date();
+    const past = new Date(timestamp);
+    const seconds = Math.floor((now.getTime() - past.getTime()) / 1000);
+    let interval = seconds / 31536000;
+    if (interval > 1) return `${Math.floor(interval)}y ago`;
+    interval = seconds / 2592000;
+    if (interval > 1) return `${Math.floor(interval)}mo ago`;
+    interval = seconds / 86400;
+    if (interval > 1) return `${Math.floor(interval)}d ago`;
+    interval = seconds / 3600;
+    if (interval > 1) return `${Math.floor(interval)}h ago`;
+    interval = seconds / 60;
+    if (interval > 1) return `${Math.floor(interval)}m ago`;
+    return `${Math.floor(seconds)}s ago`;
+};
+
+interface TaskDetailProps {
+    task: Task;
+    project?: Project;
+    client?: Client;
+    teammates: Teammate[];
+    allTeammates: Teammate[];
+    currentUser: Teammate;
+    comments: Comment[];
+    updateHistory: PendingUpdate[];
+    onAddComment: (parentId: string, text: string) => void;
+    onUpdateTask: (task: Task) => void;
+    onRateTask: (taskId: string, rating: number, rater: 'assigner' | 'ceo') => void;
+    onNavClick: (view: string) => void;
+}
+
+export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, allTeammates, currentUser, comments, updateHistory, onAddComment, onUpdateTask, onRateTask, onNavClick }) => {
+    const [newComment, setNewComment] = useState('');
+    const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+    const [completionReport, setCompletionReport] = useState('');
+    const [workExperience, setWorkExperience] = useState<'smooth' | 'issues'>('smooth');
+    const [suggestions, setSuggestions] = useState('');
+    const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+
+    const assignedTo = allTeammates.find(t => t.id === task.assignedToId);
+    const assignedBy = allTeammates.find(t => t.id === task.assignedById);
+    const isCeo = currentUser.role === 'CEO';
+    const isComplete = task.status === TaskStatus.Done;
+    const canRateAsCeo = isCeo && isComplete;
+    const canRateAsAssigner = currentUser.id === task.assignedById && isComplete;
+
+    const timeSpent = useMemo(() => {
+        if (!task.timerStartTime) return task.timeSpentSeconds;
+        const elapsed = (new Date().getTime() - new Date(task.timerStartTime).getTime()) / 1000;
+        return task.timeSpentSeconds + elapsed;
+    }, [task.timeSpentSeconds, task.timerStartTime]);
+
+    const handleCommentSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newComment.trim()) {
+            onAddComment(task.id, newComment);
+            setNewComment('');
+        }
+    };
+
+    const combinedHistory = useMemo(() => {
+        const history = [
+            ...comments.map(c => ({...c, historyItemType: 'comment' as const, date: c.timestamp})),
+            ...updateHistory.map(u => ({...u, historyItemType: 'update' as const, date: u.requestedAt}))
+        ];
+        return history.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [comments, updateHistory]);
+
+    const handleOpenReportModal = () => {
+        setCompletionReport(task.completionReport || '');
+        setWorkExperience(task.workExperience || 'smooth');
+        setSuggestions(task.suggestions || '');
+        setAttachedFiles([]);
+        setIsReportModalOpen(true);
+    };
+
+    const handleCloseReportModal = () => {
+        setIsReportModalOpen(false);
+        setCompletionReport('');
+        setWorkExperience('smooth');
+        setSuggestions('');
+        setAttachedFiles([]);
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            setAttachedFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+        }
+    };
+
+    const handleRemoveFile = (fileName: string) => {
+        setAttachedFiles(prev => prev.filter(f => f.name !== fileName));
+    };
+
+    const handleTimerAction = (action: 'start' | 'pause') => {
+        if (action === 'start') {
+            onUpdateTask({
+                ...task,
+                status: TaskStatus.InProgress,
+                timerStartTime: new Date().toISOString(),
+            });
+        } else { // pause
+            if (!task.timerStartTime) return;
+            const elapsedSeconds = (new Date().getTime() - new Date(task.timerStartTime).getTime()) / 1000;
+            onUpdateTask({
+                ...task,
+                timeSpentSeconds: task.timeSpentSeconds + elapsedSeconds,
+                timerStartTime: undefined,
+            });
+        }
+    };
+
+    const handleMarkAsDone = () => {
+        handleOpenReportModal();
+    };
+
+    const handleReportSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        let taskToSubmit = { ...task };
+        if (taskToSubmit.timerStartTime) {
+            const elapsedSeconds = (new Date().getTime() - new Date(taskToSubmit.timerStartTime).getTime()) / 1000;
+            taskToSubmit.timeSpentSeconds += elapsedSeconds;
+            taskToSubmit.timerStartTime = undefined;
+        }
+        onUpdateTask({
+            ...taskToSubmit,
+            status: TaskStatus.Done,
+            completionReport: completionReport,
+            workExperience: workExperience,
+            suggestions: suggestions,
+            completionFiles: attachedFiles.map(f => f.name)
+        });
+        handleCloseReportModal();
+    };
+
+
+    return (
+        <div className="p-6">
+            <div className="mb-6">
+                 <button onClick={() => onNavClick('tasks')} className="text-sm text-primary-400 hover:underline">&larr; Back to Tasks</button>
+                <h1 className="text-3xl font-bold text-white mt-1">{task.title}</h1>
+                <p className="text-gray-400">
+                    In project: <button onClick={() => project && onNavClick(`projectDetail/${project.id}`)} className="hover:underline" disabled={!project}>{project?.name || 'N/A'}</button>
+                </p>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Left Column */}
+                <div className="lg:col-span-2 space-y-6">
+                    <Card>
+                        <h3 className="text-xl font-semibold text-white mb-2">Description</h3>
+                        <p className="text-gray-300 whitespace-pre-wrap">{task.description || 'No description provided.'}</p>
+                    </Card>
+                    <Card>
+                        <h3 className="text-xl font-semibold text-white mb-4">Details</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                            <div><p className="text-gray-400">Status</p><Badge color={statusColors[task.status]}>{task.status}</Badge></div>
+                            <div><p className="text-gray-400">Priority</p><Badge color={priorityColors[task.priority]}>{task.priority}</Badge></div>
+                            <div><p className="text-gray-400">Deadline</p><p className="font-medium text-white">{new Date(task.deadline).toLocaleDateString()}</p></div>
+                            <div><p className="text-gray-400">Assigned To</p><p className="font-medium text-white">{assignedTo?.name || 'N/A'}</p></div>
+                            <div><p className="text-gray-400">Assigned By</p><p className="font-medium text-white">{assignedBy?.name || 'N/A'}</p></div>
+                            <div><p className="text-gray-400">Client</p><p className="font-medium text-white">{client?.name || 'N/A'}</p></div>
+                            <div className="col-span-full"><p className="text-gray-400">Divisions</p><p className="font-medium text-white">{task.divisions?.join(', ') || 'N/A'}</p></div>
+                        </div>
+                    </Card>
+                    {isComplete && task.completionReport && (
+                         <Card>
+                            <h3 className="text-xl font-semibold text-white mb-2">Completion Report</h3>
+                            <p className="text-gray-300 bg-gray-900/50 p-3 rounded-md whitespace-pre-wrap">{task.completionReport}</p>
+                        </Card>
+                    )}
+                </div>
+                
+                {/* Right Column */}
+                <div className="lg:col-span-1 space-y-6">
+                     <Card>
+                        <h3 className="text-xl font-semibold text-white mb-4">Time Tracking</h3>
+                        <div className="text-center">
+                            <p className="text-4xl font-mono font-bold text-primary-400">{formatTime(timeSpent)}</p>
+                            <p className="text-sm text-gray-400">of {formatTime(task.allocatedTimeInSeconds)} allocated</p>
+                        </div>
+                        <div className="w-full bg-gray-700 rounded-full h-2.5 mt-4">
+                            <div className="bg-primary-500 h-2.5 rounded-full" style={{ width: `${Math.min(100, (timeSpent / task.allocatedTimeInSeconds) * 100)}%` }}></div>
+                        </div>
+                        {currentUser.id === task.assignedToId && task.status !== TaskStatus.Done && (
+                            <div className="mt-6 flex items-center justify-center space-x-3">
+                                {task.status === TaskStatus.ToDo && (
+                                    <button onClick={() => handleTimerAction('start')} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Start Task</button>
+                                )}
+                                {task.status === TaskStatus.InProgress && task.timerStartTime && (
+                                    <button onClick={() => handleTimerAction('pause')} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg">Pause Timer</button>
+                                )}
+                                {task.status === TaskStatus.InProgress && !task.timerStartTime && (
+                                    <button onClick={() => handleTimerAction('start')} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Resume Timer</button>
+                                )}
+                                <button onClick={handleMarkAsDone} className="bg-primary-500 hover:bg-primary-600 text-white font-bold py-2 px-4 rounded-lg">Mark as Done</button>
+                            </div>
+                        )}
+                    </Card>
+                    <Card>
+                        <h3 className="text-xl font-semibold text-white mb-4">Ratings</h3>
+                        {!isComplete ? <p className="text-sm text-center text-gray-400">Task must be completed to be rated.</p> : (
+                        <div className="space-y-3 text-sm">
+                            <div title={!canRateAsAssigner ? "Only task assigner can rate" : "Assigner Rating"} className="flex justify-between items-center"><span className="text-gray-400">Assigner</span><StarRating rating={task.ratings?.assigner || 0} onRatingChange={r => onRateTask(task.id, r, 'assigner')} disabled={!canRateAsAssigner} /></div>
+                            {isCeo && <div title="CEO Rating" className="flex justify-between items-center"><span className="text-gray-400">CEO</span><StarRating rating={task.ratings?.ceo || 0} onRatingChange={r => onRateTask(task.id, r, 'ceo')} disabled={!canRateAsCeo} /></div>}
+                        </div>
+                        )}
+                    </Card>
+                </div>
+
+                {/* Full-width history feed */}
+                <div className="lg:col-span-3">
+                     <Card>
+                        <h3 className="text-xl font-semibold text-white mb-4">History & Comments</h3>
+                        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                            {combinedHistory.map(item => {
+                                 if (item.historyItemType === 'comment') {
+                                    const author = allTeammates.find(t => t.id === item.authorId);
+                                    return (
+                                       <div key={item.id} className="flex items-start space-x-3">
+                                           <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center font-bold text-sm flex-shrink-0">{author?.name.charAt(0) || '?'}</div>
+                                           <div className="flex-1">
+                                               <p className="text-sm"><span className="font-semibold text-white">{author?.name || 'Unknown'}</span><span className="text-gray-400 ml-2">{timeAgo(item.date)}</span></p>
+                                               <p className="p-2 bg-gray-700/50 rounded-md mt-1 text-white">{item.text}</p>
+                                           </div>
+                                       </div>
+                                    )
+                                 }
+                                 if (item.historyItemType === 'update') {
+                                     const author = allTeammates.find(t => t.id === item.requestedBy);
+                                     return (
+                                        <div key={item.id} className="flex items-start space-x-3">
+                                            <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center font-bold text-sm flex-shrink-0">{author?.name.charAt(0) || '?'}</div>
+                                            <div className="flex-1">
+                                                <p className="text-sm"><span className="font-semibold text-white">{author?.name || 'Unknown'}</span><span className="text-gray-400 ml-2">{timeAgo(item.date)}</span></p>
+                                                <div className="p-2 border border-gray-700 rounded-md mt-1">
+                                                    <p className="text-sm font-semibold text-gray-300 mb-1">Requested changes:</p>
+                                                    <div className="space-y-1 text-xs">
+                                                        {Object.entries(item.data).map(([key, value]) => (<div key={key}><strong className="capitalize font-normal text-gray-400">{key.replace(/([A-Z])/g, ' $1')}:</strong> <span className="font-mono text-red-400 line-through ml-2">{renderValue(key, (item.originalData as Record<string, any>)[key])}</span><span className="mx-1 text-gray-500">→</span><span className="font-mono text-green-400">{renderValue(key, value)}</span></div>))}
+                                                    </div>
+                                                    {item.status !== 'pending' && <p className={`mt-2 text-xs font-bold ${item.status === 'approved' ? 'text-green-400':'text-red-400'}`}>Status: {item.status} by {allTeammates.find(t => t.id === item.resolvedBy)?.name || 'N/A'}</p>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                     )
+                                 }
+                                 return null;
+                            })}
+                            <form onSubmit={handleCommentSubmit} className="flex items-center space-x-2 pt-4 border-t border-gray-700">
+                                <input type="text" value={newComment} onChange={e => setNewComment(e.target.value)} placeholder="Add a comment..." className="w-full p-2 bg-gray-700 rounded border border-gray-600"/>
+                                <button type="submit" className="bg-primary-500 hover:bg-primary-600 text-white font-bold p-2 rounded-lg">Send</button>
+                            </form>
+                        </div>
+                     </Card>
+                </div>
+            </div>
+
+            <Modal isOpen={isReportModalOpen} onClose={handleCloseReportModal} title="Submit Completion Report">
+              <form onSubmit={handleReportSubmit} className="space-y-6">
+                <p className="text-gray-300">Submitting task: <span className="font-semibold text-white">{task.title}</span></p>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Accomplishments</label>
+                  <div className="bg-gray-800 border border-gray-600 rounded-lg">
+                    <div className="flex items-center p-1.5 border-b border-gray-600 space-x-1">
+                        <button type="button" className="px-2 py-1 rounded hover:bg-gray-700 text-gray-300 font-bold text-sm">B</button>
+                        <button type="button" className="px-2 py-1 rounded hover:bg-gray-700 text-gray-300 italic text-sm">I</button>
+                        <button type="button" className="px-2 py-1 rounded hover:bg-gray-700 text-gray-300 underline text-sm">U</button>
+                    </div>
+                    <textarea 
+                        name="completionReport" 
+                        value={completionReport} 
+                        onChange={(e) => setCompletionReport(e.target.value)} 
+                        placeholder="Provide a brief report on what was accomplished..." 
+                        className="w-full p-2 bg-gray-800 rounded-b-lg border-none focus:ring-0 min-h-[100px] resize-y" 
+                        required 
+                    ></textarea>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Work Experience</label>
+                  <div className="flex space-x-4">
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input type="radio" name="workExperience" value="smooth" checked={workExperience === 'smooth'} onChange={() => setWorkExperience('smooth')} className="form-radio bg-gray-900 text-primary-500 border-gray-600 focus:ring-primary-500" />
+                      <span className="text-gray-200">Went smoothly</span>
+                    </label>
+                    <label className="flex items-center space-x-2 cursor-pointer">
+                      <input type="radio" name="workExperience" value="issues" checked={workExperience === 'issues'} onChange={() => setWorkExperience('issues')} className="form-radio bg-gray-900 text-primary-500 border-gray-600 focus:ring-primary-500" />
+                      <span className="text-gray-200">Encountered issues</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Suggestions for Improvement</label>
+                  <textarea 
+                      name="suggestions"
+                      value={suggestions}
+                      onChange={e => setSuggestions(e.target.value)}
+                      placeholder="Any suggestions for the project, task, or work environment?" 
+                      className="w-full p-2 bg-gray-700 rounded border border-gray-600 min-h-[80px]" 
+                  ></textarea>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Attach Files / Screenshots</label>
+                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-600 border-dashed rounded-md">
+                    <div className="space-y-1 text-center">
+                      <svg className="mx-auto h-12 w-12 text-gray-500" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      <div className="flex text-sm text-gray-400">
+                        <label htmlFor="file-upload-task-detail" className="relative cursor-pointer bg-gray-800 rounded-md font-medium text-primary-400 hover:text-primary-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-offset-gray-900 focus-within:ring-primary-500">
+                          <span>Upload a file</span>
+                          <input id="file-upload-task-detail" name="file-upload" type="file" className="sr-only" multiple onChange={handleFileChange} />
+                        </label>
+                        <p className="pl-1">or drag and drop</p>
+                      </div>
+                      <p className="text-xs text-gray-500">PNG, JPG, PDF, etc.</p>
+                    </div>
+                  </div>
+                  {attachedFiles.length > 0 && (
+                      <div className="mt-4 space-y-2">
+                          <h4 className="text-sm font-medium text-gray-300">Attached files:</h4>
+                          <ul className="divide-y divide-gray-700 border border-gray-700 rounded-md">
+                              {attachedFiles.map(file => (
+                                  <li key={file.name} className="px-3 py-2 flex items-center justify-between text-sm">
+                                      <span className="text-gray-200 truncate">{file.name}</span>
+                                      <button type="button" onClick={() => handleRemoveFile(file.name)} className="text-red-400 hover:text-red-300">
+                                         {ICONS.trash}
+                                      </button>
+                                  </li>
+                              ))}
+                          </ul>
+                      </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end pt-4">
+                    <button type="submit" className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Mark as Done</button>
+                </div>
+              </form>
+            </Modal>
+        </div>
+    )
+}
