@@ -19,6 +19,7 @@ import { PerformanceEvaluation } from './components/PerformanceEvaluation';
 import { ProjectDetail } from './components/ProjectDetail';
 import { TaskDetail } from './components/TaskDetail';
 import { ToastContainer } from './components/ToastContainer';
+import { DatabaseTest } from './components/DatabaseTest';
 import { COLOR_PALETTES, CHART_COLORS } from './constants';
 
 // --- SEED DATA (used as fallback) ---
@@ -801,17 +802,22 @@ function App() {
     const [view, id] = activeView.split('/');
     switch (view) {
       case 'dashboard':
-        return <Dashboard 
-            projects={projects} 
-            tasks={tasks} 
-            teammates={approvedTeammates} 
-            timeLogs={timeLogs} 
-            chartColor={CHART_COLORS[erpSettings.colorScheme]}
-            onNavClick={handleNavClick}
-            currentUser={currentUser}
-            notifications={notifications}
-            allTeammates={teammates}
-         />;
+        return (
+          <div className="space-y-6">
+            <DatabaseTest />
+            <Dashboard 
+              projects={projects} 
+              tasks={tasks} 
+              teammates={approvedTeammates} 
+              timeLogs={timeLogs} 
+              chartColor={CHART_COLORS[erpSettings.colorScheme]}
+              onNavClick={handleNavClick}
+              currentUser={currentUser}
+              notifications={notifications}
+              allTeammates={teammates}
+            />
+          </div>
+        );
       case 'profile':
         return <Profile
             currentUser={currentUser}
