@@ -20,6 +20,7 @@ import { ProjectDetail } from './components/ProjectDetail';
 import { TaskDetail } from './components/TaskDetail';
 import { ToastContainer } from './components/ToastContainer';
 import { DatabaseTest } from './components/DatabaseTest';
+import { DatabaseOperations } from './lib/db-operations';
 import { COLOR_PALETTES, CHART_COLORS } from './constants';
 
 // --- SEED DATA (used as fallback) ---
@@ -246,21 +247,29 @@ function App() {
     setIsMobileSidebarOpen(prev => !prev);
   }
 
-  const handleAddTeammate = useCallback((teammate: Omit<Teammate, 'id' | 'approved'>) => {
+  const handleAddTeammate = useCallback(async (teammate: Omit<Teammate, 'id' | 'approved'>) => {
     if (!currentUser) return;
-    const newTeammate = { ...teammate, id: `emp_${new Date().getTime()}`, approved: false } as Teammate;
-    setTeammates(prev => [...prev, newTeammate]);
     
-    const ceo = teammates.find(e => e.role === 'CEO');
-    if(ceo) {
-        addNotification({
-            userId: ceo.id,
-            message: `${currentUser.name} added '${teammate.name}', pending approval.`,
-            read: false,
-            link: 'teammates'
-        });
+    const newTeammateData = { ...teammate, approved: false };
+    const createdTeammate = await DatabaseOperations.createTeammate(newTeammateData);
+    
+    if (createdTeammate) {
+      setTeammates(prev => [...prev, createdTeammate]);
+      
+      const ceo = teammates.find(e => e.role === 'CEO');
+      if(ceo) {
+          const notification = await DatabaseOperations.createNotification({
+              userId: ceo.id,
+              message: `${currentUser.name} added '${teammate.name}', pending approval.`,
+              read: false,
+              link: 'teammates'
+          });
+          if (notification) {
+            setNotifications(prev => [notification, ...prev]);
+          }
+      }
     }
-  }, [addNotification, teammates, currentUser]);
+  }, [teammates, currentUser]);
   
   const handleApproveTeammate = useCallback((teammateId: string) => {
     let approvedTeammate: Teammate | null = null;
