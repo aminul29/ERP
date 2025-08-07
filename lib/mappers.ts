@@ -60,7 +60,7 @@ export const mapTask = (row: any): Task => ({
   workExperience: row.work_experience,
   suggestions: row.suggestions,
   completionFiles: row.completion_files || [],
-  allocatedTimeInSeconds: row.allocated_time_in_seconds,
+allocatedTimeInSeconds: row.allocated_time_in_seconds,
   timeSpentSeconds: row.time_spent_seconds,
   timerStartTime: row.timer_start_time,
   ratings: row.ratings || {}
@@ -90,7 +90,7 @@ export const mapNotification = (row: any): Notification => ({
   userId: row.user_id,
   message: row.message,
   read: row.read,
-  timestamp: row.created_at,
+  timestamp: row.timestamp || row.created_at,
   link: row.link
 });
 

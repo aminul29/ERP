@@ -20,8 +20,11 @@ import { ProjectDetail } from './components/ProjectDetail';
 import { TaskDetail } from './components/TaskDetail';
 import { ToastContainer } from './components/ToastContainer';
 import { DatabaseTest } from './components/DatabaseTest';
+import { NotificationTest } from './components/NotificationTest';
+import { ConsoleLogger } from './components/ConsoleLogger';
 import { DatabaseOperations } from './lib/db-operations';
 import { loadFromDatabase, initializeDatabase } from './lib/db-service';
+import { supabase } from './lib/supabase';
 import { COLOR_PALETTES, CHART_COLORS } from './constants';
 
 // --- SEED DATA (used as fallback) ---
@@ -127,12 +130,18 @@ function App() {
   // Teammates now loaded from database
   const [teammates, setTeammates] = useState<Teammate[]>(initialTeammates);
   const [teammatesLoaded, setTeammatesLoaded] = useState(false);
-  const [clients, setClients] = useState<Client[]>(() => loadState('erp_clients', initialClients));
+  // Clients now loaded from database
+  const [clients, setClients] = useState<Client[]>([]);
+  const [clientsLoaded, setClientsLoaded] = useState(false);
   const [projects, setProjects] = useState<Project[]>(() => loadState('erp_projects', initialProjects));
-  const [tasks, setTasks] = useState<Task[]>(() => loadState('erp_tasks', initialTasks));
+  // Tasks now loaded from database
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasksLoaded, setTasksLoaded] = useState(false);
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>(() => loadState('erp_timeLogs', initialTimeLogs));
   const [salaries, setSalaries] = useState<Salary[]>(() => loadState('erp_salaries', initialSalaries));
-  const [notifications, setNotifications] = useState<Notification[]>(() => loadState('erp_notifications', initialNotifications));
+  // Notifications now loaded from database
+  const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
+  const [notificationsLoaded, setNotificationsLoaded] = useState(false);
   const [attendance, setAttendance] = useState<Attendance[]>(() => loadState('erp_attendance', initialAttendance));
   // ERP Settings now loaded from database
   const [erpSettings, setErpSettings] = useState<ErpSettings>(initialErpSettings);
@@ -178,17 +187,20 @@ function App() {
     const loadTeammates = async () => {
       try {
         const teammatesData = await loadFromDatabase.teammates();
+        console.log('👥 Loaded teammates from database:', teammatesData);
         if (teammatesData && teammatesData.length > 0) {
           setTeammates(teammatesData);
         } else {
           // If no teammates in database, fallback to initial data
           console.log('No teammates found in database, using fallback data...');
+          console.log('👥 Using fallback teammates:', initialTeammates);
           setTeammates(initialTeammates);
         }
       } catch (error) {
         console.error('Failed to load teammates from database:', error);
         // Fallback to localStorage then initial data
         const localTeammates = loadState('erp_teammates', initialTeammates);
+        console.log('👥 Error fallback teammates:', localTeammates);
         setTeammates(localTeammates);
       } finally {
         setTeammatesLoaded(true);
@@ -198,14 +210,273 @@ function App() {
     loadTeammates();
   }, []);
 
+  // Load Notifications from database on app start
+  useEffect(() => {
+    const loadNotifications = async () => {
+      try {
+        const notificationsData = await loadFromDatabase.notifications();
+        console.log('📧 Loaded notifications from database:', notificationsData);
+        if (notificationsData && notificationsData.length > 0) {
+          setNotifications(notificationsData);
+        } else {
+          // If no notifications in database, fallback to localStorage then initial data
+          console.log('No notifications found in database, using fallback data...');
+          const localNotifications = loadState('erp_notifications', initialNotifications);
+          console.log('📧 Using fallback notifications:', localNotifications);
+          setNotifications(localNotifications);
+        }
+      } catch (error) {
+        console.error('Failed to load notifications from database:', error);
+        // Fallback to localStorage then initial data
+        const localNotifications = loadState('erp_notifications', initialNotifications);
+        console.log('📧 Error fallback notifications:', localNotifications);
+        setNotifications(localNotifications);
+      } finally {
+        setNotificationsLoaded(true);
+      }
+    };
+    
+    loadNotifications();
+  }, []);
+
+  // Load Clients from database on app start
+  useEffect(() => {
+    const loadClients = async () => {
+      try {
+        const clientsData = await loadFromDatabase.clients();
+        console.log('🏢 Loaded clients from database:', clientsData);
+        if (clientsData && clientsData.length > 0) {
+          setClients(clientsData);
+        } else {
+          // If no clients in database, fallback to initial data
+          console.log('No clients found in database, using fallback data...');
+          console.log('🏢 Using fallback clients:', initialClients);
+          setClients(initialClients);
+        }
+      } catch (error) {
+        console.error('Failed to load clients from database:', error);
+        // Fallback to localStorage then initial data
+        const localClients = loadState('erp_clients', initialClients);
+        console.log('🏢 Error fallback clients:', localClients);
+        setClients(localClients);
+      } finally {
+        setClientsLoaded(true);
+      }
+    };
+    
+    loadClients();
+  }, []);
+
+  // Load Tasks from database on app start
+  useEffect(() => {
+    const loadTasks = async () => {
+      try {
+        const tasksData = await loadFromDatabase.tasks();
+        console.log('📋 Loaded tasks from database:', tasksData);
+        if (tasksData && tasksData.length > 0) {
+          setTasks(tasksData);
+        } else {
+          // If no tasks in database, keep tasks empty (no fallback to localStorage or initialTasks)
+          console.log('No tasks found in database, keeping tasks empty...');
+          setTasks([]);
+        }
+      } catch (error) {
+        console.error('Failed to load tasks from database:', error);
+        // On error, keep tasks empty (no fallback to localStorage or initialTasks)
+        console.log('📋 Error loading tasks, keeping tasks empty...');
+        setTasks([]);
+      } finally {
+        setTasksLoaded(true);
+      }
+    };
+    
+    loadTasks();
+  }, []);
+
+  // Real-time notifications subscription
+  useEffect(() => {
+    if (!notificationsLoaded) return;
+    
+    console.log('🔄 Setting up real-time notifications subscription...');
+    
+    // Subscribe to notifications table changes
+    const subscription = supabase
+      .channel('notifications-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'notifications'
+        },
+        async (payload) => {
+          console.log('🔔 Real-time notification change:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            // New notification created
+            const newNotificationData = payload.new;
+            console.log('🆕 New notification inserted:', newNotificationData);
+            
+            // Map the database row to our notification format
+            const newNotification: Notification = {
+              id: newNotificationData.id,
+              userId: newNotificationData.user_id,
+              message: newNotificationData.message,
+              read: newNotificationData.read,
+              timestamp: newNotificationData.created_at,
+              link: newNotificationData.link
+            };
+            
+            // Add to local state if not already present
+            setNotifications(prev => {
+              const exists = prev.find(n => n.id === newNotification.id);
+              if (!exists) {
+                console.log('➕ Adding new notification to state:', newNotification);
+                return [newNotification, ...prev];
+              }
+              console.log('🔄 Notification already exists in state:', newNotification.id);
+              return prev;
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            // Notification updated (e.g., marked as read)
+            const updatedNotificationData = payload.new;
+            console.log('🔄 Notification updated:', updatedNotificationData);
+            
+            const updatedNotification: Notification = {
+              id: updatedNotificationData.id,
+              userId: updatedNotificationData.user_id,
+              message: updatedNotificationData.message,
+              read: updatedNotificationData.read,
+              timestamp: updatedNotificationData.created_at,
+              link: updatedNotificationData.link
+            };
+            
+            setNotifications(prev => prev.map(n => 
+              n.id === updatedNotification.id ? updatedNotification : n
+            ));
+          }
+        }
+      )
+      .subscribe();
+      
+    console.log('✓ Real-time notifications subscription active');
+    
+    // Cleanup subscription on unmount
+    return () => {
+      console.log('🗑️ Cleaning up notifications subscription');
+      subscription.unsubscribe();
+    };
+  }, [notificationsLoaded]);
+
+  // Real-time tasks subscription
+  useEffect(() => {
+    if (!tasksLoaded) return;
+    
+    console.log('🔄 Setting up real-time tasks subscription...');
+    
+    // Subscribe to tasks table changes
+    const subscription = supabase
+      .channel('tasks-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'tasks'
+        },
+        async (payload) => {
+          console.log('📋 Real-time task change:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            // New task created
+            const newTaskData = payload.new;
+            console.log('🆕 New task inserted:', newTaskData);
+            
+            // Map the database row to our task format
+            const newTask: Task = {
+              id: newTaskData.id,
+              title: newTaskData.title,
+              description: newTaskData.description,
+              projectId: newTaskData.project_id,
+              clientId: newTaskData.client_id,
+              divisions: newTaskData.divisions,
+              assignedToId: newTaskData.assigned_to_id,
+              assignedById: newTaskData.assigned_by_id,
+              status: newTaskData.status,
+              deadline: newTaskData.deadline,
+              priority: newTaskData.priority,
+              completionReport: newTaskData.completion_report,
+              allocatedTimeInSeconds: newTaskData.allocated_time_seconds,
+              timeSpentSeconds: newTaskData.time_spent_seconds,
+              timerStartTime: newTaskData.timer_start_time,
+              ratings: newTaskData.ratings || {}
+            };
+            
+            // Add to local state if not already present
+            setTasks(prev => {
+              const exists = prev.find(t => t.id === newTask.id);
+              if (!exists) {
+                console.log('➕ Adding new task to state:', newTask);
+                return [newTask, ...prev];
+              }
+              console.log('🔄 Task already exists in state:', newTask.id);
+              return prev;
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            // Task updated
+            const updatedTaskData = payload.new;
+            console.log('🔄 Task updated:', updatedTaskData);
+            
+            const updatedTask: Task = {
+              id: updatedTaskData.id,
+              title: updatedTaskData.title,
+              description: updatedTaskData.description,
+              projectId: updatedTaskData.project_id,
+              clientId: updatedTaskData.client_id,
+              divisions: updatedTaskData.divisions,
+              assignedToId: updatedTaskData.assigned_to_id,
+              assignedById: updatedTaskData.assigned_by_id,
+              status: updatedTaskData.status,
+              deadline: updatedTaskData.deadline,
+              priority: updatedTaskData.priority,
+              completionReport: updatedTaskData.completion_report,
+              allocatedTimeInSeconds: updatedTaskData.allocated_time_seconds,
+              timeSpentSeconds: updatedTaskData.time_spent_seconds,
+              timerStartTime: updatedTaskData.timer_start_time,
+              ratings: updatedTaskData.ratings || {}
+            };
+            
+            setTasks(prev => prev.map(t => 
+              t.id === updatedTask.id ? updatedTask : t
+            ));
+          } else if (payload.eventType === 'DELETE') {
+            // Task deleted
+            const deletedTaskData = payload.old;
+            console.log('🗑️ Task deleted:', deletedTaskData);
+            
+            setTasks(prev => prev.filter(t => t.id !== deletedTaskData.id));
+          }
+        }
+      )
+      .subscribe();
+      
+    console.log('✓ Real-time tasks subscription active');
+    
+    // Cleanup subscription on unmount
+    return () => {
+      console.log('🗑️ Cleaning up tasks subscription');
+      subscription.unsubscribe();
+    };
+  }, [tasksLoaded]);
+
   // Effects to save state changes to localStorage (gradually migrating to database)
   // Teammates now managed through database operations, no localStorage sync needed
-  useEffect(() => { localStorage.setItem('erp_clients', JSON.stringify(clients)); }, [clients]);
+  // Clients now managed through database operations, no localStorage sync needed
   useEffect(() => { localStorage.setItem('erp_projects', JSON.stringify(projects)); }, [projects]);
-  useEffect(() => { localStorage.setItem('erp_tasks', JSON.stringify(tasks)); }, [tasks]);
+  // Tasks now managed through database operations, no localStorage sync needed
   useEffect(() => { localStorage.setItem('erp_timeLogs', JSON.stringify(timeLogs)); }, [timeLogs]);
   useEffect(() => { localStorage.setItem('erp_salaries', JSON.stringify(salaries)); }, [salaries]);
-  useEffect(() => { localStorage.setItem('erp_notifications', JSON.stringify(notifications)); }, [notifications]);
+  // Notifications now managed through database operations, no localStorage sync needed
   useEffect(() => { localStorage.setItem('erp_attendance', JSON.stringify(attendance)); }, [attendance]);
   // ERP Settings now saved to database instead of localStorage
   useEffect(() => {
@@ -265,28 +536,82 @@ function App() {
 
   const currentUserNotifications = useMemo(() => {
     if (!currentUser) return [];
-    return notifications
+    console.log('🔍 Filtering notifications for current user:', {
+      currentUserId: currentUser.id,
+      totalNotifications: notifications.length,
+      notifications: notifications.map(n => ({ id: n.id, userId: n.userId, message: n.message }))
+    });
+    const filtered = notifications
       .filter(n => n.userId === currentUser.id)
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    console.log('🎯 Filtered notifications:', filtered);
+    return filtered;
   }, [notifications, currentUser]);
 
-  const addNotification = useCallback((notification: Omit<Notification, 'id' | 'timestamp'>) => {
-    const newNotification: Notification = {
-      ...notification,
-      id: `notif_${new Date().getTime()}`,
-      timestamp: new Date().toISOString()
-    };
-    setNotifications(prev => [newNotification, ...prev]);
+  const addNotification = useCallback(async (notification: Omit<Notification, 'id' | 'timestamp'>) => {
+    // Create notification in database
+    const createdNotification = await DatabaseOperations.createNotification(notification);
+    if (createdNotification) {
+      setNotifications(prev => [createdNotification, ...prev]);
+    }
   }, []);
 
-  const handleMarkAsRead = useCallback((notificationId: string) => {
-    setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, read: true } : n));
-  }, []);
+  const handleMarkAsRead = useCallback(async (notificationId: string) => {
+    // Update notification in database
+    const notificationToUpdate = notifications.find(n => n.id === notificationId);
+    if (notificationToUpdate) {
+      const updatedNotification = { ...notificationToUpdate, read: true };
+      const result = await DatabaseOperations.updateNotification(updatedNotification);
+      if (result) {
+        setNotifications(prev => prev.map(n => n.id === notificationId ? result : n));
+      }
+    }
+  }, [notifications]);
 
-  const handleMarkAllAsRead = useCallback(() => {
-    if (!currentUser) return;
-    setNotifications(prev => prev.map(n => n.userId === currentUser.id ? { ...n, read: true } : n));
-  }, [currentUser]);
+  const handleMarkAllAsRead = useCallback(async () => {
+    console.log('🔄 Mark all as read clicked');
+    if (!currentUser) {
+      console.log('❌ No current user found');
+      return;
+    }
+    
+    // Find all unread notifications for current user
+    const unreadNotifications = notifications.filter(n => n.userId === currentUser.id && !n.read);
+    console.log('📧 Unread notifications to mark:', unreadNotifications.length, unreadNotifications);
+    
+    if (unreadNotifications.length === 0) {
+      console.log('✅ No unread notifications to mark');
+      return;
+    }
+    
+    // Update each notification in database
+    const updatePromises = unreadNotifications.map(async (notification) => {
+      const updatedNotification = { ...notification, read: true };
+      console.log('🔄 Updating notification:', notification.id);
+      return DatabaseOperations.updateNotification(updatedNotification);
+    });
+    
+    try {
+      const results = await Promise.all(updatePromises);
+      console.log('✅ Database update results:', results);
+      // Update local state with successful database updates
+      const validResults = results.filter(result => result !== null);
+      if (validResults.length > 0) {
+        console.log('🔄 Updating local state with', validResults.length, 'notifications');
+        setNotifications(prev => prev.map(n => {
+          const updatedResult = validResults.find(r => r?.id === n.id);
+          return updatedResult ? updatedResult : n;
+        }));
+      } else {
+        console.log('❌ No valid results from database updates');
+      }
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error);
+      console.log('🔄 Falling back to local update');
+      // Fallback to local update if database fails
+      setNotifications(prev => prev.map(n => n.userId === currentUser.id ? { ...n, read: true } : n));
+    }
+  }, [currentUser, notifications]);
 
   const handleLogin = (email: string, password?: string): boolean => {
     const user = teammates.find(e => e.email?.toLowerCase() === email.toLowerCase() && e.password === password && e.approved);
@@ -333,16 +658,24 @@ function App() {
         console.log('Teammate created successfully:', createdTeammate);
         setTeammates(prev => [...prev, createdTeammate]);
         
-        const ceo = teammates.find(e => e.role === 'CEO');
+        // Load teammates from database to get actual UUIDs
+        const dbTeammates = await loadFromDatabase.teammates();
+        const ceo = dbTeammates?.find(e => e.role === 'CEO');
+        console.log('Found CEO for notification:', ceo);
+        
         if(ceo) {
-            const notification = await DatabaseOperations.createNotification({
-                userId: ceo.id,
-                message: `${currentUser.name} added '${teammate.name}', pending approval.`,
-                read: false,
-                link: 'teammates'
-            });
-            if (notification) {
-              setNotifications(prev => [notification, ...prev]);
+            try {
+              const notification = await DatabaseOperations.createNotification({
+                  userId: ceo.id,
+                  message: `${currentUser.name} added '${teammate.name}', pending approval.`,
+                  read: false,
+                  link: 'teammates'
+              });
+              if (notification) {
+                setNotifications(prev => [notification, ...prev]);
+              }
+            } catch (error) {
+              console.error('Error creating notification:', error);
             }
         }
       } else {
@@ -376,6 +709,7 @@ function App() {
           userId: updatedTeammate.id,
           message: 'Your account has been approved by the CEO.',
           read: false,
+          link: 'profile'
         });
         if (notification) {
           setNotifications(prev => [notification, ...prev]);
@@ -387,7 +721,8 @@ function App() {
           const managerNotification = await DatabaseOperations.createNotification({
             userId: manager.id,
             message: `Account for ${updatedTeammate.name} was approved.`,
-            read: false
+            read: false,
+            link: 'teammates'
           });
           if (managerNotification) {
             setNotifications(prev => [managerNotification, ...prev]);
@@ -440,6 +775,7 @@ function App() {
                       userId: currentUser.id,
                       message: `New teammate role created: "${role}".`,
                       read: false,
+                      link: 'settings'
                   });
               }
               return { ...prev, roles: [...prev.roles, role] };
@@ -550,6 +886,7 @@ function App() {
             userId: currentUser.id,
             message: `You rated project "${project.name}" ${rating} stars as ${rater}.`,
             read: true,
+            link: `projectDetail/${project.id}`
         });
     }
   }, [projects, addNotification, currentUser]);
@@ -562,6 +899,7 @@ function App() {
             userId: currentUser.id,
             message: `Project "${updatedProject.name}" was updated directly.`,
             read: true,
+            link: `projectDetail/${updatedProject.id}`
         });
     } else {
         const originalProject = projects.find(p => p.id === updatedProject.id);
@@ -605,24 +943,57 @@ function App() {
     }
   }, [currentUser, projects, teammates, addNotification]);
 
-  const handleAddTask = useCallback((task: Omit<Task, 'id' | 'timeSpentSeconds' | 'timerStartTime' | 'assignedById' | 'ratings'>) => {
-    if (!currentUser) return;
-    const newTask: Task = { 
+  const handleAddTask = useCallback(async (task: Omit<Task, 'id' | 'timeSpentSeconds' | 'timerStartTime' | 'assignedById' | 'ratings'>) => {
+    console.log('🚀 handleAddTask called with:', task);
+    
+    if (!currentUser) {
+      console.error('❌ No current user found');
+      return;
+    }
+    
+    console.log('👤 Current user:', currentUser);
+    
+    const newTaskData = { 
       ...task, 
-      id: `task_${new Date().getTime()}`,
       timeSpentSeconds: 0,
       assignedById: currentUser.id,
       ratings: {}
     };
-    setTasks(prev => [newTask, ...prev]);
     
-    if (task.assignedToId !== currentUser.id) {
-        addNotification({
-            userId: task.assignedToId,
-            message: `You were assigned a new task: "${task.title}"`,
-            read: false,
-            link: `taskDetail/${newTask.id}`
+    console.log('📋 New task data prepared:', newTaskData);
+    
+    try {
+      console.log('🔄 Calling DatabaseOperations.createTask...');
+      // Create task in database
+      const createdTask = await DatabaseOperations.createTask(newTaskData);
+      
+      console.log('📥 Database response:', createdTask);
+      
+      if (createdTask) {
+        console.log('✅ Task created successfully:', createdTask);
+        // Update local state only if database create succeeds
+        setTasks(prev => {
+          console.log('🔄 Updating local tasks state, previous tasks count:', prev.length);
+          return [createdTask, ...prev];
         });
+        
+        // Send notification to assigned user if different from current user
+        if (task.assignedToId !== currentUser.id) {
+            console.log('📬 Sending notification to assigned user:', task.assignedToId);
+            await addNotification({
+                userId: task.assignedToId,
+                message: `You were assigned a new task: "${task.title}"`,
+                read: false,
+                link: `taskDetail/${createdTask.id}`
+            });
+        }
+      } else {
+        console.error('❌ Failed to create task - no data returned');
+      }
+    } catch (error) {
+      console.error('❌ Error creating task:', error);
+      console.error('❌ Error stack:', error.stack);
+      // Could show user-friendly error message here
     }
   }, [addNotification, currentUser]);
   
@@ -640,20 +1011,37 @@ function App() {
             userId: currentUser.id,
             message: `You rated task "${task.title}" ${rating} stars as ${rater}.`,
             read: true,
+            link: `taskDetail/${task.id}`
         });
     }
   }, [tasks, addNotification, currentUser]);
 
-  const handleEditTask = useCallback((editedTask: Task) => {
+  const handleEditTask = useCallback(async (editedTask: Task) => {
      if (!currentUser) return;
+     
+     console.log('✏️ Editing task:', editedTask);
+     
      if (currentUser.role === 'CEO') {
-        setTasks(prev => prev.map(t => t.id === editedTask.id ? editedTask : t));
-         addNotification({
-            userId: currentUser.id,
-            message: `Task "${editedTask.title}" was updated directly.`,
-            read: true,
-        });
+        // CEO can directly update tasks in database
+        try {
+          const result = await DatabaseOperations.updateTask(editedTask);
+          if (result) {
+            console.log('✅ Task edited successfully by CEO:', result);
+            setTasks(prev => prev.map(t => t.id === editedTask.id ? result : t));
+            await addNotification({
+              userId: currentUser.id,
+              message: `Task "${editedTask.title}" was updated directly.`,
+              read: true,
+              link: `taskDetail/${editedTask.id}`
+            });
+          } else {
+            console.error('❌ Failed to edit task - no data returned');
+          }
+        } catch (error) {
+          console.error('❌ Error editing task:', error);
+        }
      } else {
+        // Non-CEO users need approval for task changes
         const originalTask = tasks.find(t => t.id === editedTask.id);
         if (!originalTask) return;
 
@@ -685,7 +1073,7 @@ function App() {
 
         const ceo = teammates.find(e => e.role === 'CEO');
         if (ceo) {
-            addNotification({
+            await addNotification({
                 userId: ceo.id,
                 message: `${currentUser.name} requested changes to task "${editedTask.title}".`,
                 read: false,
@@ -754,25 +1142,67 @@ function App() {
     }, [currentUser, tasks, teammates, addNotification, setPendingUpdates]);
 
 
-  const handleUpdateTask = useCallback((updatedTask: Task) => {
+  const handleUpdateTask = useCallback(async (updatedTask: Task) => {
+    console.log('📝 Updating task:', updatedTask);
     const originalTask = tasks.find(t => t.id === updatedTask.id);
-    setTasks(prev => prev.map(item => item.id === updatedTask.id ? updatedTask : item));
     
-    if (originalTask?.status !== TaskStatus.Done && updatedTask.status === TaskStatus.Done) {
-        const managers = teammates.filter(e => e.role === 'Admin' || e.role === 'CEO' || e.role.includes('Lead'));
-        const teammate = teammates.find(e => e.id === updatedTask.assignedToId);
-        managers.forEach(manager => {
+    try {
+      // Update task in database
+      const result = await DatabaseOperations.updateTask(updatedTask);
+      
+      if (result) {
+        console.log('✅ Task updated successfully in database:', result);
+        // Update local state only if database update succeeds
+        setTasks(prev => prev.map(item => item.id === updatedTask.id ? result : item));
+        
+        // Check if task was just completed and notify managers
+        if (originalTask?.status !== TaskStatus.Done && result.status === TaskStatus.Done) {
+          const managers = teammates.filter(e => e.role === 'Admin' || e.role === 'CEO' || e.role.includes('Lead'));
+          const teammate = teammates.find(e => e.id === result.assignedToId);
+          
+          // Send notifications to managers
+          const notificationPromises = managers.map(async (manager) => {
             if (manager.id !== teammate?.id) {
-                 addNotification({
-                    userId: manager.id,
-                    message: `${teammate?.name || 'Someone'} completed the task: "${updatedTask.title}"`,
-                    read: false,
-                    link: `taskDetail/${updatedTask.id}`
-                });
+              return addNotification({
+                userId: manager.id,
+                message: `${teammate?.name || 'Someone'} completed the task: "${result.title}"`,
+                read: false,
+                link: `taskDetail/${result.id}`
+              });
             }
-        });
+            return null;
+          });
+          
+          await Promise.all(notificationPromises);
+        }
+      } else {
+        console.error('❌ Failed to update task - no data returned');
+      }
+    } catch (error) {
+      console.error('❌ Error updating task:', error);
+      // Could show user-friendly error message here
     }
   }, [tasks, teammates, addNotification]);
+
+  const handleDeleteTask = useCallback(async (taskId: string) => {
+    console.log('🗑️ Deleting task:', taskId);
+    
+    try {
+      // Delete task from database
+      const success = await DatabaseOperations.deleteTask(taskId);
+      
+      if (success) {
+        console.log('✅ Task deleted successfully from database');
+        // Remove from local state only if database deletion succeeds
+        setTasks(prev => prev.filter(item => item.id !== taskId));
+      } else {
+        console.error('❌ Failed to delete task - operation returned false');
+      }
+    } catch (error) {
+      console.error('❌ Error deleting task:', error);
+      // Could show user-friendly error message here
+    }
+  }, []);
   
   const handleLogTime = useCallback((log: Omit<TimeLog, 'id'>) => {
     setTimeLogs(prev => [{ ...log, id: `log_${new Date().getTime()}` } as TimeLog, ...prev]);
@@ -955,7 +1385,9 @@ function App() {
         return (
           <div className="space-y-6">
             <DatabaseTest />
-            <Dashboard 
+            <NotificationTest />
+            <ConsoleLogger />
+            <Dashboard
               projects={projects} 
               tasks={tasks} 
               teammates={approvedTeammates} 
@@ -981,7 +1413,7 @@ function App() {
       case 'projects':
         return <ProjectManagement projects={projects} tasks={tasks} clients={clients} teammates={approvedTeammates} onAddProject={handleAddProject} onUpdateProject={handleUpdateProject} onRateProject={handleRateProject} currentUser={currentUser} pendingUpdates={pendingUpdates.filter(u=>u.status === 'pending')} onNavClick={handleNavClick} divisions={erpSettings.divisions} onAddClient={handleAddClient} />;
       case 'tasks':
-        return <TaskManagement tasks={tasks} projects={projects} teammates={approvedTeammates} currentUser={currentUser} onAddTask={handleAddTask} onEditTask={handleEditTask} onUpdateTask={handleUpdateTask} onRateTask={handleRateTask} clients={clients} divisions={erpSettings.divisions} pendingUpdates={pendingUpdates.filter(u=>u.status === 'pending')} onNavClick={handleNavClick} />;
+        return <TaskManagement tasks={tasks} projects={projects} teammates={approvedTeammates} currentUser={currentUser} onAddTask={handleAddTask} onEditTask={handleEditTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onRateTask={handleRateTask} clients={clients} divisions={erpSettings.divisions} pendingUpdates={pendingUpdates.filter(u=>u.status === 'pending')} onNavClick={handleNavClick} />;
       case 'time':
         return <TimeTracking timeLogs={timeLogs} teammates={approvedTeammates} currentUser={currentUser} onLogTime={handleLogTime} dailyTimeGoal={erpSettings.dailyTimeGoal} />;
       case 'salary':

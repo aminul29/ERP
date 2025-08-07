@@ -20,11 +20,56 @@ const priorityColors: { [key in TaskPriority]: 'green' | 'yellow' | 'red' } = {
 };
 
 const formatTime = (totalSeconds: number): string => {
-    if (totalSeconds < 0) totalSeconds = 0;
+    if (!totalSeconds || isNaN(totalSeconds) || totalSeconds < 0) totalSeconds = 0;
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = Math.floor(totalSeconds % 60);
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+};
+
+const TimerDisplay: React.FC<{task: Task}> = ({ task }) => {
+    const calculateRemaining = () => {
+        // Ensure we have valid numbers, default to 0
+        const allocated = Number(task.allocatedTimeInSeconds) || 0;
+        const spent = Number(task.timeSpentSeconds) || 0;
+        
+        // Only calculate elapsed time if timer is actually running (has timerStartTime)
+        let elapsedSinceStart = 0;
+        if (task.timerStartTime && task.timerStartTime.trim() !== '') {
+            const startTime = new Date(task.timerStartTime).getTime();
+            const currentTime = new Date().getTime();
+            // Only count elapsed time if start time is valid and not in the future
+            if (!isNaN(startTime) && startTime <= currentTime) {
+                elapsedSinceStart = (currentTime - startTime) / 1000;
+            }
+        }
+        
+        const remaining = allocated - spent - elapsedSinceStart;
+        return isNaN(remaining) ? allocated - spent : remaining;
+    };
+
+    const [remainingSeconds, setRemainingSeconds] = useState(calculateRemaining);
+
+    useEffect(() => {
+        const newRemaining = calculateRemaining();
+        setRemainingSeconds(newRemaining);
+        
+        // Only start interval if timer is actually running
+        if (task.timerStartTime && task.timerStartTime.trim() !== '') {
+            const interval = setInterval(() => {
+                setRemainingSeconds(calculateRemaining());
+            }, 1000);
+            return () => clearInterval(interval);
+        }
+    }, [task.timerStartTime, task.timeSpentSeconds, task.allocatedTimeInSeconds]);
+    
+    const isOvertime = remainingSeconds < 0;
+
+    return (
+        <div className={`font-mono font-semibold ${isOvertime ? 'text-red-400' : 'text-primary-400'}`}>
+            {isOvertime && '-'}{formatTime(Math.abs(remainingSeconds))}
+        </div>
+    );
 };
 
 const renderValue = (key: string, value: any) => {
@@ -71,22 +116,18 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, a
     const [newComment, setNewComment] = useState('');
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [completionReport, setCompletionReport] = useState('');
-    const [workExperience, setWorkExperience] = useState<'smooth' | 'issues'>('smooth');
+const [workExperience, setWorkExperience] = useState<'smooth' | 'issues'>('smooth');
     const [suggestions, setSuggestions] = useState('');
-    const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
 
     const assignedTo = allTeammates.find(t => t.id === task.assignedToId);
     const assignedBy = allTeammates.find(t => t.id === task.assignedById);
     const isCeo = currentUser.role === 'CEO';
+    const isManager = ['HR and Admin', 'CEO', 'Lead Web Developer', 'SMM and Design Lead', 'Sales and PR Lead', 'Lead SEO Expert'].includes(currentUser.role);
     const isComplete = task.status === TaskStatus.Done;
     const canRateAsCeo = isCeo && isComplete;
     const canRateAsAssigner = currentUser.id === task.assignedById && isComplete;
 
-    const timeSpent = useMemo(() => {
-        if (!task.timerStartTime) return task.timeSpentSeconds;
-        const elapsed = (new Date().getTime() - new Date(task.timerStartTime).getTime()) / 1000;
-        return task.timeSpentSeconds + elapsed;
-    }, [task.timeSpentSeconds, task.timerStartTime]);
 
     const handleCommentSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -139,11 +180,11 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, a
             });
         } else { // pause
             if (!task.timerStartTime) return;
-            const elapsedSeconds = (new Date().getTime() - new Date(task.timerStartTime).getTime()) / 1000;
+            const elapsedSeconds = Math.round((new Date().getTime() - new Date(task.timerStartTime).getTime()) / 1000);
             onUpdateTask({
                 ...task,
                 timeSpentSeconds: task.timeSpentSeconds + elapsedSeconds,
-                timerStartTime: undefined,
+                timerStartTime: null,
             });
         }
     };
@@ -156,9 +197,9 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, a
         e.preventDefault();
         let taskToSubmit = { ...task };
         if (taskToSubmit.timerStartTime) {
-            const elapsedSeconds = (new Date().getTime() - new Date(taskToSubmit.timerStartTime).getTime()) / 1000;
+            const elapsedSeconds = Math.round((new Date().getTime() - new Date(taskToSubmit.timerStartTime).getTime()) / 1000);
             taskToSubmit.timeSpentSeconds += elapsedSeconds;
-            taskToSubmit.timerStartTime = undefined;
+            taskToSubmit.timerStartTime = null;
         }
         onUpdateTask({
             ...taskToSubmit,
@@ -214,13 +255,13 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, a
                      <Card>
                         <h3 className="text-xl font-semibold text-white mb-4">Time Tracking</h3>
                         <div className="text-center">
-                            <p className="text-4xl font-mono font-bold text-primary-400">{formatTime(timeSpent)}</p>
+                            <TimerDisplay task={task} />
                             <p className="text-sm text-gray-400">of {formatTime(task.allocatedTimeInSeconds)} allocated</p>
                         </div>
                         <div className="w-full bg-gray-700 rounded-full h-2.5 mt-4">
-                            <div className="bg-primary-500 h-2.5 rounded-full" style={{ width: `${Math.min(100, (timeSpent / task.allocatedTimeInSeconds) * 100)}%` }}></div>
+                            <div className="bg-primary-500 h-2.5 rounded-full" style={{ width: `${Math.min(100, task.allocatedTimeInSeconds ? ((task.timeSpentSeconds + (task.timerStartTime ? (Date.now() - new Date(task.timerStartTime).getTime()) / 1000 : 0)) / task.allocatedTimeInSeconds) * 100 : 0)}%` }}></div>
                         </div>
-                        {currentUser.id === task.assignedToId && task.status !== TaskStatus.Done && (
+                        {(currentUser.id === task.assignedToId || isManager) && task.status !== TaskStatus.Done && (
                             <div className="mt-6 flex items-center justify-center space-x-3">
                                 {task.status === TaskStatus.ToDo && (
                                     <button onClick={() => handleTimerAction('start')} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Start Task</button>

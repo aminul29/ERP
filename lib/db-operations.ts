@@ -162,7 +162,7 @@ export class DatabaseOperations {
           client_id: project.clientId,
           start_date: project.startDate,
           end_date: project.endDate,
-          allocated_time_seconds: project.allocatedTimeInSeconds,
+          allocated_time_in_seconds: project.allocatedTimeInSeconds,
           priority: project.priority,
           divisions: project.divisions,
           team_member_ids: project.teamMemberIds,
@@ -191,7 +191,7 @@ export class DatabaseOperations {
           client_id: project.clientId,
           start_date: project.startDate,
           end_date: project.endDate,
-          allocated_time_seconds: project.allocatedTimeInSeconds,
+          allocated_time_in_seconds: project.allocatedTimeInSeconds,
           priority: project.priority,
           divisions: project.divisions,
           team_member_ids: project.teamMemberIds,
@@ -214,25 +214,47 @@ export class DatabaseOperations {
   // TASKS OPERATIONS
   static async createTask(task: Omit<Task, 'id'>): Promise<Task | null> {
     try {
+      console.log('🔍 createTask input:', task);
+      
+      // Helper function to validate UUID or convert to null
+      const validateUUID = (id: string | undefined | null): string | null => {
+        if (!id || id.trim() === '') return null;
+        // Check if it's a hardcoded ID pattern (like 'cli1', 'proj1', 'emp1', etc.)
+        if (/^(cli|proj|emp|task|notif|att|sal|log)\d+$/.test(id)) {
+          console.warn(`⚠️ Converting hardcoded ID '${id}' to null`);
+          return null;
+        }
+        // Basic UUID format check
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+          console.warn(`⚠️ Invalid UUID format '${id}', converting to null`);
+          return null;
+        }
+        return id;
+      };
+      
+      const insertData = {
+        title: task.title,
+        description: task.description,
+        project_id: validateUUID(task.projectId),
+        client_id: validateUUID(task.clientId),
+        divisions: task.divisions,
+        assigned_to_id: task.assignedToId, // This should be valid from database-loaded teammates
+        assigned_by_id: task.assignedById, // This should be valid from database-loaded teammates
+        status: task.status,
+        deadline: task.deadline,
+        priority: task.priority,
+        completion_report: task.completionReport,
+        allocated_time_in_seconds: task.allocatedTimeInSeconds,
+        time_spent_seconds: Math.round(task.timeSpentSeconds || 0),
+        timer_start_time: task.timerStartTime,
+        ratings: task.ratings || {}
+      };
+      
+      console.log('📤 createTask database insert data:', insertData);
+      
       const { data, error } = await supabase
         .from('tasks')
-        .insert([{
-          title: task.title,
-          description: task.description,
-          project_id: task.projectId,
-          client_id: task.clientId,
-          divisions: task.divisions,
-          assigned_to_id: task.assignedToId,
-          assigned_by_id: task.assignedById,
-          status: task.status,
-          deadline: task.deadline,
-          priority: task.priority,
-          completion_report: task.completionReport,
-          allocated_time_seconds: task.allocatedTimeInSeconds,
-          time_spent_seconds: task.timeSpentSeconds || 0,
-          timer_start_time: task.timerStartTime,
-          ratings: task.ratings || {}
-        }])
+        .insert([insertData])
         .select()
         .single();
 
@@ -251,8 +273,8 @@ export class DatabaseOperations {
         .update({
           title: task.title,
           description: task.description,
-          project_id: task.projectId,
-          client_id: task.clientId,
+          project_id: task.projectId || null,
+          client_id: task.clientId || null,
           divisions: task.divisions,
           assigned_to_id: task.assignedToId,
           assigned_by_id: task.assignedById,
@@ -260,9 +282,9 @@ export class DatabaseOperations {
           deadline: task.deadline,
           priority: task.priority,
           completion_report: task.completionReport,
-          allocated_time_seconds: task.allocatedTimeInSeconds,
-          time_spent_seconds: task.timeSpentSeconds || 0,
-          timer_start_time: task.timerStartTime,
+          allocated_time_in_seconds: task.allocatedTimeInSeconds,
+          time_spent_seconds: Math.round(task.timeSpentSeconds || 0),
+          timer_start_time: task.timerStartTime ?? null,
           ratings: task.ratings || {}
         })
         .eq('id', task.id)
@@ -274,6 +296,21 @@ export class DatabaseOperations {
     } catch (error) {
       console.error('Error updating task:', error);
       return null;
+    }
+  }
+
+  static async deleteTask(taskId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .delete()
+        .eq('id', taskId);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      return false;
     }
   }
 
@@ -347,19 +384,25 @@ export class DatabaseOperations {
   // NOTIFICATIONS OPERATIONS
   static async createNotification(notification: Omit<Notification, 'id' | 'timestamp'>): Promise<Notification | null> {
     try {
+      const insertData = {
+        user_id: notification.userId,
+        message: notification.message,
+        read: notification.read,
+        link: notification.link
+        // Let database handle timestamp with created_at
+      };
+      
       const { data, error } = await supabase
         .from('notifications')
-        .insert([{
-          user_id: notification.userId,
-          message: notification.message,
-          read: notification.read,
-          link: notification.link,
-          timestamp: new Date().toISOString()
-        }])
+        .insert([insertData])
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Database error creating notification:', error);
+        throw error;
+      }
+      
       return mapNotification(data);
     } catch (error) {
       console.error('Error creating notification:', error);
@@ -369,20 +412,26 @@ export class DatabaseOperations {
 
   static async updateNotification(notification: Notification): Promise<Notification | null> {
     try {
+      console.log('🔄 Updating notification in database:', notification.id);
       const { data, error } = await supabase
         .from('notifications')
         .update({
           user_id: notification.userId,
           message: notification.message,
           read: notification.read,
-          link: notification.link,
-          timestamp: notification.timestamp
+          link: notification.link
+          // Don't update timestamp/created_at - it's a creation timestamp
         })
         .eq('id', notification.id)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Database error updating notification:', error);
+        throw error;
+      }
+      
+      console.log('✅ Database update successful:', data);
       return mapNotification(data);
     } catch (error) {
       console.error('Error updating notification:', error);

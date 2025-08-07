@@ -8,7 +8,10 @@ import { ICONS } from '../constants';
 import { StarRating } from './ui/StarRating';
 
 const formatTime = (totalSeconds: number): string => {
-    if (totalSeconds < 0) totalSeconds = 0;
+    // Handle invalid numbers
+    if (!totalSeconds || isNaN(totalSeconds) || totalSeconds < 0) {
+        return '00:00:00';
+    }
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = Math.floor(totalSeconds % 60);
@@ -17,19 +20,33 @@ const formatTime = (totalSeconds: number): string => {
 
 const TimerDisplay: React.FC<{task: Task}> = ({ task }) => {
     const calculateRemaining = () => {
-        const allocated = task.allocatedTimeInSeconds;
-        const spent = task.timeSpentSeconds;
-        const elapsedSinceStart = task.timerStartTime
-            ? (new Date().getTime() - new Date(task.timerStartTime).getTime()) / 1000
-            : 0;
-        return allocated - spent - elapsedSinceStart;
+        // Ensure we have valid numbers, default to 0
+        const allocated = Number(task.allocatedTimeInSeconds) || 0;
+        const spent = Number(task.timeSpentSeconds) || 0;
+        
+        // Only calculate elapsed time if timer is actually running (has timerStartTime)
+        let elapsedSinceStart = 0;
+        if (task.timerStartTime && task.timerStartTime.trim() !== '') {
+            const startTime = new Date(task.timerStartTime).getTime();
+            const currentTime = new Date().getTime();
+            // Only count elapsed time if start time is valid and not in the future
+            if (!isNaN(startTime) && startTime <= currentTime) {
+                elapsedSinceStart = (currentTime - startTime) / 1000;
+            }
+        }
+        
+        const remaining = allocated - spent - elapsedSinceStart;
+        return isNaN(remaining) ? allocated - spent : remaining;
     };
 
     const [remainingSeconds, setRemainingSeconds] = useState(calculateRemaining);
 
     useEffect(() => {
-        setRemainingSeconds(calculateRemaining()); // Recalculate on every task change
-        if (task.timerStartTime) {
+        const newRemaining = calculateRemaining();
+        setRemainingSeconds(newRemaining);
+        
+        // Only start interval if timer is actually running
+        if (task.timerStartTime && task.timerStartTime.trim() !== '') {
             const interval = setInterval(() => {
                 setRemainingSeconds(calculateRemaining());
             }, 1000);
@@ -55,6 +72,7 @@ interface TaskManagementProps {
   onAddTask: (task: Omit<Task, 'id' | 'timeSpentSeconds' | 'timerStartTime' | 'assignedById' | 'ratings'>) => void;
   onEditTask: (task: Task) => void;
   onUpdateTask: (task: Task) => void; // For direct updates like timer/status
+  onDeleteTask: (taskId: string) => void;
   onRateTask: (taskId: string, rating: number, rater: 'assigner' | 'ceo') => void;
   clients: Client[];
   divisions: string[];
@@ -86,10 +104,12 @@ const priorityColors: { [key in TaskPriority]: 'green' | 'yellow' | 'red' } = {
   [TaskPriority.High]: 'red',
 };
 
-export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects, teammates, currentUser, onAddTask, onEditTask, onUpdateTask, onRateTask, clients, divisions, pendingUpdates, onNavClick }) => {
+export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects, teammates, currentUser, onAddTask, onEditTask, onUpdateTask, onDeleteTask, onRateTask, clients, divisions, pendingUpdates, onNavClick }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Omit<Task, 'id' | 'timeSpentSeconds' | 'timerStartTime' | 'assignedById' | 'ratings'> | Task | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
   
   const [reportingTask, setReportingTask] = useState<Task | null>(null);
   const [completionReport, setCompletionReport] = useState('');
@@ -213,7 +233,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
           });
       } else { // pause
           if (!task.timerStartTime) return; 
-          const elapsedSeconds = (new Date().getTime() - new Date(task.timerStartTime).getTime()) / 1000;
+          const elapsedSeconds = Math.round((new Date().getTime() - new Date(task.timerStartTime).getTime()) / 1000);
           onUpdateTask({
               ...task,
               timeSpentSeconds: task.timeSpentSeconds + elapsedSeconds,
@@ -225,7 +245,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
   const handleMarkAsDone = (task: Task) => {
     let taskToReport = { ...task };
     if (task.timerStartTime) {
-        const elapsedSeconds = (new Date().getTime() - new Date(task.timerStartTime).getTime()) / 1000;
+        const elapsedSeconds = Math.round((new Date().getTime() - new Date(task.timerStartTime).getTime()) / 1000);
         taskToReport.timeSpentSeconds += elapsedSeconds;
         taskToReport.timerStartTime = undefined;
     }
@@ -254,6 +274,23 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
             completionFiles: attachedFiles.map(f => f.name)
         });
         handleCloseReportModal();
+    }
+  };
+
+  const handleOpenDeleteModal = (task: Task) => {
+    setTaskToDelete(task);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleCloseDeleteModal = () => {
+    setIsDeleteModalOpen(false);
+    setTaskToDelete(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (taskToDelete) {
+      onDeleteTask(taskToDelete.id);
+      handleCloseDeleteModal();
     }
   };
 
@@ -346,7 +383,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                     </td>
                     <td className="p-4">
                       <div className="flex items-center justify-center space-x-2">
-                          {task.assignedToId === currentUser.id && task.status !== TaskStatus.Done && (
+                          {(task.assignedToId === currentUser.id || isManager) && task.status !== TaskStatus.Done && (
                           <>
                               {task.status === TaskStatus.ToDo && (
                               <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded">Start</button>
@@ -362,9 +399,14 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                           )}
                           {task.status === TaskStatus.Done && <span className="text-gray-400 text-sm flex items-center justify-center">Completed</span>}
                           {isManager && (
-                              <button onClick={() => handleOpenModal(task)} className="text-yellow-400 hover:text-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending} title={isPending ? "Changes pending approval" : "Edit Task"}>
-                                  {ICONS.edit}
-                              </button>
+                              <>
+                                  <button onClick={() => handleOpenModal(task)} className="text-yellow-400 hover:text-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending} title={isPending ? "Changes pending approval" : "Edit Task"}>
+                                      {ICONS.edit}
+                                  </button>
+                                  <button onClick={() => handleOpenDeleteModal(task)} className="text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending} title={isPending ? "Changes pending approval" : "Delete Task"}>
+                                      {ICONS.trash}
+                                  </button>
+                              </>
                           )}
                       </div>
                     </td>
@@ -422,7 +464,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
               </div>
 
               <div className="mt-4 pt-3 border-t border-gray-700 flex items-center justify-center space-x-2 flex-wrap gap-2">
-                {task.assignedToId === currentUser.id && task.status !== TaskStatus.Done && (
+                {(task.assignedToId === currentUser.id || isManager) && task.status !== TaskStatus.Done && (
                   <>
                       {task.status === TaskStatus.ToDo && (
                       <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded">Start</button>
@@ -438,9 +480,14 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                   )}
                   {task.status === TaskStatus.Done && <span className="text-gray-400 text-sm flex items-center justify-center">Completed</span>}
                   {isManager && (
-                      <button onClick={() => handleOpenModal(task)} className="text-yellow-400 hover:text-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending} title={isPending ? "Changes pending approval" : "Edit Task"}>
-                          {ICONS.edit}
-                      </button>
+                      <>
+                          <button onClick={() => handleOpenModal(task)} className="text-yellow-400 hover:text-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending} title={isPending ? "Changes pending approval" : "Edit Task"}>
+                              {ICONS.edit}
+                          </button>
+                          <button onClick={() => handleOpenDeleteModal(task)} className="text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending} title={isPending ? "Changes pending approval" : "Delete Task"}>
+                              {ICONS.trash}
+                          </button>
+                      </>
                   )}
               </div>
             </Card>
@@ -466,7 +513,6 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                       <label className="block text-sm font-medium text-gray-300 mb-1">Client (Optional)</label>
                       <select name="clientId" value={editingTask.clientId || ''} onChange={handleChange} className="w-full p-2 bg-gray-700 rounded border border-gray-600">
                           <option value="">Select Client</option>
-                          <option value="internal-webwizbd">WebWizBD (Internal)</option>
                           {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
                   </div>
@@ -636,6 +682,36 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                     <button type="submit" className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Mark as Done</button>
                 </div>
               </form>
+            )}
+        </Modal>
+        
+        {/* Delete Confirmation Modal */}
+        <Modal isOpen={isDeleteModalOpen} onClose={handleCloseDeleteModal} title="Delete Task">
+            {taskToDelete && (
+                <div className="space-y-4">
+                    <p className="text-gray-300">
+                        Are you sure you want to delete the task 
+                        <span className="font-semibold text-white">"{taskToDelete.title}"</span>?
+                    </p>
+                    <p className="text-sm text-gray-400">
+                        This action cannot be undone.
+                    </p>
+                    
+                    <div className="flex justify-end space-x-3 pt-4">
+                        <button 
+                            onClick={handleCloseDeleteModal} 
+                            className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg"
+                        >
+                            Cancel
+                        </button>
+                        <button 
+                            onClick={handleConfirmDelete} 
+                            className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg"
+                        >
+                            Delete Task
+                        </button>
+                    </div>
+                </div>
             )}
         </Modal>
     </div>
