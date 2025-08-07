@@ -21,6 +21,7 @@ import { TaskDetail } from './components/TaskDetail';
 import { ToastContainer } from './components/ToastContainer';
 import { DatabaseTest } from './components/DatabaseTest';
 import { DatabaseOperations } from './lib/db-operations';
+import { loadFromDatabase, initializeDatabase } from './lib/db-service';
 import { COLOR_PALETTES, CHART_COLORS } from './constants';
 
 // --- SEED DATA (used as fallback) ---
@@ -85,7 +86,7 @@ const initialErpSettings: ErpSettings = {
     companyName: 'WebWizBD ERP',
     dailyTimeGoal: 1.5,
     currencySymbol: '$',
-    theme: Theme.System,
+    theme: Theme.Dark,
     colorScheme: ColorScheme.Gold,
     divisions: [
         'UI Ux Design',
@@ -122,8 +123,10 @@ function App() {
   const [activeView, setActiveView] = useState('dashboard');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
-  // Load state from localStorage or use initial data
-  const [teammates, setTeammates] = useState<Teammate[]>(() => loadState('erp_teammates', initialTeammates));
+  // Load state from localStorage or use initial data (gradually migrating to database)
+  // Teammates now loaded from database
+  const [teammates, setTeammates] = useState<Teammate[]>(initialTeammates);
+  const [teammatesLoaded, setTeammatesLoaded] = useState(false);
   const [clients, setClients] = useState<Client[]>(() => loadState('erp_clients', initialClients));
   const [projects, setProjects] = useState<Project[]>(() => loadState('erp_projects', initialProjects));
   const [tasks, setTasks] = useState<Task[]>(() => loadState('erp_tasks', initialTasks));
@@ -131,7 +134,9 @@ function App() {
   const [salaries, setSalaries] = useState<Salary[]>(() => loadState('erp_salaries', initialSalaries));
   const [notifications, setNotifications] = useState<Notification[]>(() => loadState('erp_notifications', initialNotifications));
   const [attendance, setAttendance] = useState<Attendance[]>(() => loadState('erp_attendance', initialAttendance));
-  const [erpSettings, setErpSettings] = useState<ErpSettings>(() => loadState('erp_settings', initialErpSettings));
+  // ERP Settings now loaded from database
+  const [erpSettings, setErpSettings] = useState<ErpSettings>(initialErpSettings);
+  const [erpSettingsLoaded, setErpSettingsLoaded] = useState(false);
   const [pendingUpdates, setPendingUpdates] = useState<PendingUpdate[]>(() => loadState('erp_pendingUpdates', []));
   const [comments, setComments] = useState<Comment[]>(() => loadState('erp_comments', initialComments));
   const [pendingAssignments, setPendingAssignments] = useState<Project[]>([]);
@@ -141,8 +146,60 @@ function App() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => loadState('erp_currentUserId', null));
   const currentUser = useMemo(() => teammates.find(t => t.id === currentUserId) || null, [currentUserId, teammates]);
 
-  // Effects to save state changes to localStorage
-  useEffect(() => { localStorage.setItem('erp_teammates', JSON.stringify(teammates)); }, [teammates]);
+  // Initialize database and load ERP Settings on app start
+  useEffect(() => {
+    const initializeApp = async () => {
+      try {
+        // First initialize database with default data
+        await initializeDatabase();
+        
+        // Then load settings
+        const settings = await loadFromDatabase.erpSettings();
+        if (settings) {
+          setErpSettings(settings);
+        } else {
+          // If no settings in database, use initial settings
+          setErpSettings(initialErpSettings);
+        }
+      } catch (error) {
+        console.error('Failed to initialize app:', error);
+        // Fallback to initial settings
+        setErpSettings(initialErpSettings);
+      } finally {
+        setErpSettingsLoaded(true);
+      }
+    };
+    
+    initializeApp();
+  }, []);
+
+  // Load Teammates from database on app start
+  useEffect(() => {
+    const loadTeammates = async () => {
+      try {
+        const teammatesData = await loadFromDatabase.teammates();
+        if (teammatesData && teammatesData.length > 0) {
+          setTeammates(teammatesData);
+        } else {
+          // If no teammates in database, fallback to initial data
+          console.log('No teammates found in database, using fallback data...');
+          setTeammates(initialTeammates);
+        }
+      } catch (error) {
+        console.error('Failed to load teammates from database:', error);
+        // Fallback to localStorage then initial data
+        const localTeammates = loadState('erp_teammates', initialTeammates);
+        setTeammates(localTeammates);
+      } finally {
+        setTeammatesLoaded(true);
+      }
+    };
+    
+    loadTeammates();
+  }, []);
+
+  // Effects to save state changes to localStorage (gradually migrating to database)
+  // Teammates now managed through database operations, no localStorage sync needed
   useEffect(() => { localStorage.setItem('erp_clients', JSON.stringify(clients)); }, [clients]);
   useEffect(() => { localStorage.setItem('erp_projects', JSON.stringify(projects)); }, [projects]);
   useEffect(() => { localStorage.setItem('erp_tasks', JSON.stringify(tasks)); }, [tasks]);
@@ -150,7 +207,19 @@ function App() {
   useEffect(() => { localStorage.setItem('erp_salaries', JSON.stringify(salaries)); }, [salaries]);
   useEffect(() => { localStorage.setItem('erp_notifications', JSON.stringify(notifications)); }, [notifications]);
   useEffect(() => { localStorage.setItem('erp_attendance', JSON.stringify(attendance)); }, [attendance]);
-  useEffect(() => { localStorage.setItem('erp_settings', JSON.stringify(erpSettings)); }, [erpSettings]);
+  // ERP Settings now saved to database instead of localStorage
+  useEffect(() => {
+    if (erpSettingsLoaded) {
+      const saveErpSettings = async () => {
+        try {
+          await DatabaseOperations.updateErpSettings(erpSettings);
+        } catch (error) {
+          console.error('Failed to save ERP settings to database:', error);
+        }
+      };
+      saveErpSettings();
+    }
+  }, [erpSettings, erpSettingsLoaded]);
   useEffect(() => { localStorage.setItem('erp_currentUserId', JSON.stringify(currentUserId)); }, [currentUserId]);
   useEffect(() => { localStorage.setItem('erp_pendingUpdates', JSON.stringify(pendingUpdates)); }, [pendingUpdates]);
   useEffect(() => { localStorage.setItem('erp_comments', JSON.stringify(comments)); }, [comments]);
@@ -173,11 +242,12 @@ function App() {
     
     body.classList.add('bg-white', 'dark:bg-gray-950', 'text-gray-900', 'dark:text-gray-100', 'transition-colors', 'duration-300');
 
+    // Apply theme based on settings
     if (erpSettings.theme === Theme.System) {
       const systemIsDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       root.classList.toggle('dark', systemIsDark);
     } else {
-      root.classList.toggle('dark', erpSettings.theme === Theme.Dark);
+      root.classList.toggle('dark', erpSettings.theme === Theme.Dark || erpSettings.theme === 'dark');
     }
   }, [erpSettings.theme]);
 
@@ -248,62 +318,118 @@ function App() {
   }
 
   const handleAddTeammate = useCallback(async (teammate: Omit<Teammate, 'id' | 'approved'>) => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      console.error('No current user found');
+      return;
+    }
     
+    console.log('Adding teammate:', teammate);
     const newTeammateData = { ...teammate, approved: false };
-    const createdTeammate = await DatabaseOperations.createTeammate(newTeammateData);
     
-    if (createdTeammate) {
-      setTeammates(prev => [...prev, createdTeammate]);
+    try {
+      const createdTeammate = await DatabaseOperations.createTeammate(newTeammateData);
       
-      const ceo = teammates.find(e => e.role === 'CEO');
-      if(ceo) {
-          const notification = await DatabaseOperations.createNotification({
-              userId: ceo.id,
-              message: `${currentUser.name} added '${teammate.name}', pending approval.`,
-              read: false,
-              link: 'teammates'
-          });
-          if (notification) {
-            setNotifications(prev => [notification, ...prev]);
-          }
+      if (createdTeammate) {
+        console.log('Teammate created successfully:', createdTeammate);
+        setTeammates(prev => [...prev, createdTeammate]);
+        
+        const ceo = teammates.find(e => e.role === 'CEO');
+        if(ceo) {
+            const notification = await DatabaseOperations.createNotification({
+                userId: ceo.id,
+                message: `${currentUser.name} added '${teammate.name}', pending approval.`,
+                read: false,
+                link: 'teammates'
+            });
+            if (notification) {
+              setNotifications(prev => [notification, ...prev]);
+            }
+        }
+      } else {
+        console.error('Failed to create teammate - no data returned');
+        // You could show a user-friendly error message here
       }
+    } catch (error) {
+      console.error('Error in handleAddTeammate:', error);
+      // You could show a user-friendly error message here
     }
   }, [teammates, currentUser]);
   
-  const handleApproveTeammate = useCallback((teammateId: string) => {
-    let approvedTeammate: Teammate | null = null;
-    setTeammates(prev => prev.map(emp => {
-        if(emp.id === teammateId) {
-            approvedTeammate = { ...emp, approved: true };
-            return approvedTeammate;
+  const handleApproveTeammate = useCallback(async (teammateId: string) => {
+    try {
+      // Find the teammate to approve
+      const teammateToApprove = teammates.find(emp => emp.id === teammateId);
+      if (!teammateToApprove) return;
+
+      // Update teammate in database
+      const approvedTeammate = { ...teammateToApprove, approved: true };
+      const updatedTeammate = await DatabaseOperations.updateTeammate(approvedTeammate);
+      
+      if (updatedTeammate) {
+        // Update local state
+        setTeammates(prev => prev.map(emp => 
+          emp.id === teammateId ? updatedTeammate : emp
+        ));
+
+        // Add notification for the approved teammate
+        const notification = await DatabaseOperations.createNotification({
+          userId: updatedTeammate.id,
+          message: 'Your account has been approved by the CEO.',
+          read: false,
+        });
+        if (notification) {
+          setNotifications(prev => [notification, ...prev]);
         }
-        return emp;
-    }));
 
-    if(approvedTeammate) {
-        addNotification({
-            userId: approvedTeammate.id,
-            message: 'Your account has been approved by the CEO.',
-            read: false,
-        });
+        // Notify admins and HR managers
         const adminsAndHrs = teammates.filter(e => e.role === 'Admin' || e.role === 'HR Manager');
-        adminsAndHrs.forEach(manager => {
-            addNotification({
-                userId: manager.id,
-                message: `Account for ${approvedTeammate?.name} was approved.`,
-                read: false
-            });
-        });
+        for (const manager of adminsAndHrs) {
+          const managerNotification = await DatabaseOperations.createNotification({
+            userId: manager.id,
+            message: `Account for ${updatedTeammate.name} was approved.`,
+            read: false
+          });
+          if (managerNotification) {
+            setNotifications(prev => [managerNotification, ...prev]);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to approve teammate:', error);
+      // Could show user-friendly error message here
     }
-  }, [addNotification, teammates]);
+  }, [teammates, setNotifications]);
 
-  const handleUpdateTeammate = useCallback((updatedTeammate: Teammate) => {
-    setTeammates(prev => prev.map(item => item.id === updatedTeammate.id ? updatedTeammate : item));
+  const handleUpdateTeammate = useCallback(async (updatedTeammate: Teammate) => {
+    try {
+      // Update teammate in database
+      const result = await DatabaseOperations.updateTeammate(updatedTeammate);
+      
+      if (result) {
+        // Update local state only if database update succeeds
+        setTeammates(prev => prev.map(item => 
+          item.id === updatedTeammate.id ? result : item
+        ));
+      }
+    } catch (error) {
+      console.error('Failed to update teammate:', error);
+      // Could show user-friendly error message here
+    }
   }, []);
 
-  const handleDeleteTeammate = useCallback((teammateId: string) => {
-    setTeammates(prev => prev.filter(item => item.id !== teammateId));
+  const handleDeleteTeammate = useCallback(async (teammateId: string) => {
+    try {
+      // Delete teammate from database
+      const success = await DatabaseOperations.deleteTeammate(teammateId);
+      
+      if (success) {
+        // Remove from local state only if database deletion succeeds
+        setTeammates(prev => prev.filter(item => item.id !== teammateId));
+      }
+    } catch (error) {
+      console.error('Failed to delete teammate:', error);
+      // Could show user-friendly error message here
+    }
   }, []);
   
   const handleAddRole = useCallback((role: string) => {
@@ -322,13 +448,28 @@ function App() {
       });
   }, [addNotification, currentUser]);
 
-  const handleChangePassword = useCallback((teammateId: string, oldPass: string, newPass: string): { success: boolean; message: string } => {
-    const user = teammates.find(t => t.id === teammateId);
-    if (!user || user.password !== oldPass) {
-        return { success: false, message: 'Current password is incorrect.' };
+  const handleChangePassword = useCallback(async (teammateId: string, oldPass: string, newPass: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      const user = teammates.find(t => t.id === teammateId);
+      if (!user || user.password !== oldPass) {
+          return { success: false, message: 'Current password is incorrect.' };
+      }
+
+      // Update password in database
+      const updatedUser = { ...user, password: newPass };
+      const result = await DatabaseOperations.updateTeammate(updatedUser);
+      
+      if (result) {
+        // Update local state only if database update succeeds
+        setTeammates(prev => prev.map(t => t.id === teammateId ? result : t));
+        return { success: true, message: 'Password updated successfully!' };
+      } else {
+        return { success: false, message: 'Failed to update password. Please try again.' };
+      }
+    } catch (error) {
+      console.error('Failed to update password:', error);
+      return { success: false, message: 'Failed to update password. Please try again.' };
     }
-    setTeammates(prev => prev.map(t => t.id === teammateId ? { ...t, password: newPass } : t));
-    return { success: true, message: 'Password updated successfully!' };
   }, [teammates]);
   
   const handleRequestRoleChange = useCallback((newRole: string, justification: string) => {

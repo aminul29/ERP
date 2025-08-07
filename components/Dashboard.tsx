@@ -6,6 +6,7 @@ import { Card } from './ui/Card';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Badge } from './ui/Badge';
 import { ICONS } from '../constants';
+import { ConsoleErrorDisplay } from './ConsoleErrorDisplay';
 
 interface DashboardProps {
   projects: Project[];
@@ -100,6 +101,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, tasks, teammates
   return (
     <div className="p-4 sm:p-6 space-y-6">
       <h1 className="text-3xl font-bold text-white">Dashboard</h1>
+      
+      {/* Console Error Display */}
+      <ConsoleErrorDisplay />
       
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

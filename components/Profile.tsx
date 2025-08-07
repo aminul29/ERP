@@ -8,7 +8,7 @@ import { Modal } from './ui/Modal';
 interface ProfileProps {
   currentUser: Teammate;
   onUpdateProfile: (teammate: Teammate) => void;
-  onChangePassword: (teammateId: string, oldPass: string, newPass: string) => { success: boolean, message: string };
+  onChangePassword: (teammateId: string, oldPass: string, newPass: string) => Promise<{ success: boolean, message: string }>;
   onRequestRoleChange: (newRole: string, justification: string) => void;
   roles: string[];
 }
@@ -60,7 +60,7 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, 
     setTimeout(() => setInfoMessage({ type: '', text: '' }), 3000);
   };
 
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordMessage({ type: '', text: '' });
     if (passwordData.new !== passwordData.confirm) {
@@ -71,12 +71,17 @@ export const Profile: React.FC<ProfileProps> = ({ currentUser, onUpdateProfile, 
        setPasswordMessage({ type: 'error', text: 'New password cannot be empty.' });
        return;
     }
-    const result = onChangePassword(currentUser.id, passwordData.current, passwordData.new);
-    if (result.success) {
-      setPasswordMessage({ type: 'success', text: result.message });
-      setPasswordData({ current: '', new: '', confirm: '' });
-    } else {
-      setPasswordMessage({ type: 'error', text: result.message });
+    
+    try {
+      const result = await onChangePassword(currentUser.id, passwordData.current, passwordData.new);
+      if (result.success) {
+        setPasswordMessage({ type: 'success', text: result.message });
+        setPasswordData({ current: '', new: '', confirm: '' });
+      } else {
+        setPasswordMessage({ type: 'error', text: result.message });
+      }
+    } catch (error) {
+      setPasswordMessage({ type: 'error', text: 'Failed to update password. Please try again.' });
     }
   };
 

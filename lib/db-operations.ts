@@ -14,23 +14,37 @@ export class DatabaseOperations {
   // TEAMMATES OPERATIONS
   static async createTeammate(teammate: Omit<Teammate, 'id'>): Promise<Teammate | null> {
     try {
+      console.log('📝 Creating teammate with data:', teammate);
+      
+      const insertData = {
+        name: teammate.name,
+        role: teammate.role,
+        join_date: teammate.joinDate,
+        salary: teammate.salary,
+        approved: teammate.approved,
+        email: teammate.email,
+        phone: teammate.phone,
+        password: teammate.password
+      };
+      
+      console.log('📤 Sending to database:', insertData);
+      
       const { data, error } = await supabase
         .from('teammates')
-        .insert([{
-          name: teammate.name,
-          role: teammate.role,
-          join_date: teammate.joinDate,
-          salary: teammate.salary,
-          approved: teammate.approved,
-          email: teammate.email,
-          phone: teammate.phone,
-          password: teammate.password
-        }])
+        .insert([insertData])
         .select()
         .single();
 
-      if (error) throw error;
-      return mapTeammate(data);
+      if (error) {
+        console.error('❌ Database error:', error);
+        throw error;
+      }
+      
+      console.log('✅ Database response:', data);
+      const mappedData = mapTeammate(data);
+      console.log('🗺️ Mapped teammate:', mappedData);
+      
+      return mappedData;
     } catch (error) {
       console.error('Error creating teammate:', error);
       return null;
@@ -503,20 +517,51 @@ export class DatabaseOperations {
   // ERP SETTINGS OPERATIONS
   static async updateErpSettings(settings: ErpSettings): Promise<ErpSettings | null> {
     try {
-      const { data, error } = await supabase
+      // First try to get existing settings
+      const { data: existingSettings } = await supabase
         .from('erp_settings')
-        .upsert([{
-          id: 1, // Single settings record
-          company_name: settings.companyName,
-          daily_time_goal: settings.dailyTimeGoal,
-          currency_symbol: settings.currencySymbol,
-          theme: settings.theme,
-          color_scheme: settings.colorScheme,
-          divisions: settings.divisions,
-          roles: settings.roles
-        }])
-        .select()
+        .select('id')
+        .limit(1)
         .single();
+
+      let data, error;
+      
+      if (existingSettings) {
+        // Update existing record
+        const result = await supabase
+          .from('erp_settings')
+          .update({
+            company_name: settings.companyName,
+            daily_time_goal: settings.dailyTimeGoal,
+            currency_symbol: settings.currencySymbol,
+            theme: settings.theme,
+            color_scheme: settings.colorScheme,
+            divisions: settings.divisions,
+            roles: settings.roles
+          })
+          .eq('id', existingSettings.id)
+          .select()
+          .single();
+        data = result.data;
+        error = result.error;
+      } else {
+        // Insert new record
+        const result = await supabase
+          .from('erp_settings')
+          .insert([{
+            company_name: settings.companyName,
+            daily_time_goal: settings.dailyTimeGoal,
+            currency_symbol: settings.currencySymbol,
+            theme: settings.theme,
+            color_scheme: settings.colorScheme,
+            divisions: settings.divisions,
+            roles: settings.roles
+          }])
+          .select()
+          .single();
+        data = result.data;
+        error = result.error;
+      }
 
       if (error) throw error;
       return {

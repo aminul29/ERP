@@ -335,23 +335,96 @@ export const saveToDatabase = {
 // Initialize database with default data
 export const initializeDatabase = async () => {
   try {
-    // Check if we already have data
-    const { data: existing } = await supabase
+    console.log('🚀 Checking database initialization...');
+    
+    // Check if we already have the default CEO
+    const { data: ceoExists } = await supabase
+      .from(TABLES.TEAMMATES)
+      .select('id')
+      .eq('email', 'iislamaminul@gmail.com')
+      .limit(1);
+    
+    if (ceoExists && ceoExists.length > 0) {
+      console.log('✅ Database already has default CEO account');
+      return;
+    }
+
+    console.log('🌱 Seeding database with initial data...');
+    
+    // Create default CEO account
+    const defaultCEO = {
+      name: 'Md. Aminul Islam',
+      role: 'CEO',
+      join_date: '2022-01-15',
+      salary: 200000,
+      approved: true,
+      email: 'iislamaminul@gmail.com',
+      phone: '111-111-1111',
+      password: '12345'
+    };
+    
+    const { data: ceoResult, error: ceoError } = await supabase
+      .from(TABLES.TEAMMATES)
+      .insert([defaultCEO])
+      .select()
+      .single();
+    
+    if (ceoError) {
+      console.error('❌ Failed to create default CEO:', ceoError);
+      return;
+    }
+    
+    console.log('✅ Default CEO account created:', ceoResult.name);
+    
+    // Initialize ERP Settings if they don't exist
+    const { data: settingsExists } = await supabase
       .from(TABLES.ERP_SETTINGS)
       .select('id')
       .limit(1);
     
-    if (existing && existing.length > 0) {
-      console.log('Database already initialized');
-      return;
+    if (!settingsExists || settingsExists.length === 0) {
+      const defaultSettings = {
+        company_name: 'WebWizBD ERP',
+        daily_time_goal: 1.5,
+        currency_symbol: '$',
+        theme: 'dark',
+        color_scheme: 'gold',
+        divisions: ['UI Ux Design', 'Web Development', 'SEO', 'SMM', 'Content Writing'],
+        roles: ['CEO', 'HR and Admin', 'SMM and Design Lead', 'Sales and PR Lead', 'Lead Web Developer', 'Lead SEO Expert', 'Content Writer', 'Developer', 'Designer']
+      };
+      
+      const { error: settingsError } = await supabase
+        .from(TABLES.ERP_SETTINGS)
+        .insert([defaultSettings]);
+      
+      if (settingsError) {
+        console.error('❌ Failed to create default settings:', settingsError);
+      } else {
+        console.log('✅ Default ERP settings created');
+      }
     }
-
-    console.log('Initializing database with default data...');
     
-    // This will be called once to populate initial data
-    // We can add seed data insertion here if needed
+    // Create a welcome notification for the CEO
+    const welcomeNotification = {
+      user_id: ceoResult.id,
+      message: 'Welcome to WebWizBD ERP! Your account has been set up successfully.',
+      read: false,
+      timestamp: new Date().toISOString()
+    };
+    
+    const { error: notificationError } = await supabase
+      .from(TABLES.NOTIFICATIONS)
+      .insert([welcomeNotification]);
+    
+    if (notificationError) {
+      console.error('❌ Failed to create welcome notification:', notificationError);
+    } else {
+      console.log('✅ Welcome notification created');
+    }
+    
+    console.log('🎉 Database initialization complete!');
     
   } catch (error) {
-    console.error('Error initializing database:', error);
+    console.error('❌ Error initializing database:', error);
   }
 };
