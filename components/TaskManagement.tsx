@@ -599,7 +599,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
           )}
       </Modal>
 
-       <Modal isOpen={isReportModalOpen} onClose={handleCloseReportModal} title="Submit Completion Report">
+       <Modal isOpen={isReportModalOpen} onClose={handleCloseReportModal} title="Submit Completion Report" closeOnOutsideClick={false}>
             {reportingTask && (
               <form onSubmit={handleReportSubmit} className="space-y-6">
                 <p className="text-gray-300">Submitting task: <span className="font-semibold text-white">{reportingTask.title}</span></p>
