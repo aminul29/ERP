@@ -99,6 +99,16 @@ const timeAgo = (timestamp: string) => {
     return `${Math.floor(seconds)}s ago`;
 };
 
+// Utility function to strip HTML tags from text
+const stripHtmlTags = (html: string): string => {
+    if (!html) return '';
+    // Create a temporary div element to parse HTML
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    // Extract text content (automatically strips HTML tags)
+    return tempDiv.textContent || tempDiv.innerText || '';
+};
+
 interface TaskDetailProps {
     task: Task;
     project?: Project;
@@ -269,7 +279,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, a
                     
                     <Card>
                         <h3 className="text-xl font-semibold text-white mb-2">Description</h3>
-                        <p className="text-gray-300 whitespace-pre-wrap">{task.description || 'No description provided.'}</p>
+                        <p className="text-gray-300 whitespace-pre-wrap">{stripHtmlTags(task.description) || 'No description provided.'}</p>
                     </Card>
                     <Card>
                         <h3 className="text-xl font-semibold text-white mb-4">Details</h3>
