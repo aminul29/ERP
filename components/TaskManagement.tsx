@@ -126,6 +126,20 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
   
   const isManager = ['HR and Admin', 'CEO', 'Lead Web Developer', 'SMM and Design Lead', 'Sales and PR Lead', 'Lead SEO Expert'].includes(currentUser.role);
   const isCeo = currentUser.role === 'CEO';
+  
+  // Helper function to check if user can edit/delete a specific task
+  const canEditTask = (task: Task) => {
+    return isCeo || currentUser.id === task.assignedById;
+  };
+  
+  const canDeleteTask = (task: Task) => {
+    const canDelete = isCeo || currentUser.id === task.assignedById;
+    // If task has moved out of "To Do" status, only CEO can delete
+    if (task.status !== TaskStatus.ToDo && !isCeo) {
+      return false;
+    }
+    return canDelete;
+  };
 
   const userTasks = useMemo(() => {
     return tasks
@@ -394,14 +408,19 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                           </>
                           )}
                           {task.status === TaskStatus.Done && <span className="text-gray-400 text-sm flex items-center justify-center">Completed</span>}
-                          {isManager && (
+                          {/* Edit and Delete buttons - only for task assigner and CEO */}
+                          {(canEditTask(task) || canDeleteTask(task)) && (
                               <>
-                                  <button onClick={() => handleOpenModal(task)} className="text-yellow-400 hover:text-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending} title={isPending ? "Changes pending approval" : "Edit Task"}>
-                                      {ICONS.edit}
-                                  </button>
-                                  <button onClick={() => handleOpenDeleteModal(task)} className="text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending} title={isPending ? "Changes pending approval" : "Delete Task"}>
-                                      {ICONS.trash}
-                                  </button>
+                                  {canEditTask(task) && (
+                                      <button onClick={() => handleOpenModal(task)} className="text-yellow-400 hover:text-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending} title={isPending ? "Changes pending approval" : "Edit Task"}>
+                                          {ICONS.edit}
+                                      </button>
+                                  )}
+                                  {canDeleteTask(task) && (
+                                      <button onClick={() => handleOpenDeleteModal(task)} className="text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending || !canDeleteTask(task)} title={!canDeleteTask(task) ? "Only CEO can delete tasks that have started" : isPending ? "Changes pending approval" : "Delete Task"}>
+                                          {ICONS.trash}
+                                      </button>
+                                  )}
                               </>
                           )}
                       </div>
@@ -476,14 +495,19 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                   </>
                   )}
                   {task.status === TaskStatus.Done && <span className="text-gray-400 text-sm flex items-center justify-center">Completed</span>}
-                  {isManager && (
+                  {/* Edit and Delete buttons - only for task assigner and CEO */}
+                  {(canEditTask(task) || canDeleteTask(task)) && (
                       <>
-                          <button onClick={() => handleOpenModal(task)} className="text-yellow-400 hover:text-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending} title={isPending ? "Changes pending approval" : "Edit Task"}>
-                              {ICONS.edit}
-                          </button>
-                          <button onClick={() => handleOpenDeleteModal(task)} className="text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending} title={isPending ? "Changes pending approval" : "Delete Task"}>
-                              {ICONS.trash}
-                          </button>
+                          {canEditTask(task) && (
+                              <button onClick={() => handleOpenModal(task)} className="text-yellow-400 hover:text-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending} title={isPending ? "Changes pending approval" : "Edit Task"}>
+                                  {ICONS.edit}
+                              </button>
+                          )}
+                          {canDeleteTask(task) && (
+                              <button onClick={() => handleOpenDeleteModal(task)} className="text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending || !canDeleteTask(task)} title={!canDeleteTask(task) ? "Only CEO can delete tasks that have started" : isPending ? "Changes pending approval" : "Delete Task"}>
+                                  {ICONS.trash}
+                              </button>
+                          )}
                       </>
                   )}
               </div>

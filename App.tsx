@@ -1018,19 +1018,52 @@ function App() {
      
      console.log('✏️ Editing task:', editedTask);
      
-     if (currentUser.role === 'CEO') {
-        // CEO can directly update tasks in database
+     const originalTask = tasks.find(t => t.id === editedTask.id);
+     if (!originalTask) return;
+
+     // Check if work has been started on the task
+     const hasWorkStarted = (
+       originalTask.status !== TaskStatus.ToDo || 
+       (originalTask.timeSpentSeconds && originalTask.timeSpentSeconds > 0) ||
+       originalTask.timerStartTime
+     );
+
+     // Check if current user is the task assigner
+     const isTaskAssigner = currentUser.id === originalTask.assignedById;
+     
+     // Determine if direct update is allowed
+     const canDirectUpdate = (
+       currentUser.role === 'CEO' || 
+       (isTaskAssigner && !hasWorkStarted)
+     );
+     
+     if (canDirectUpdate) {
+        // CEO or task assigner (for unstarted tasks) can directly update tasks in database
         try {
           const result = await DatabaseOperations.updateTask(editedTask);
           if (result) {
-            console.log('✅ Task edited successfully by CEO:', result);
+            console.log('✅ Task edited successfully:', result);
             setTasks(prev => prev.map(t => t.id === editedTask.id ? result : t));
+            
+            const updateReason = currentUser.role === 'CEO' ? 'by CEO' : 'by task assigner (task not started)';
+            console.log(`✅ Task updated directly ${updateReason}`);
+            
             await addNotification({
               userId: currentUser.id,
               message: `Task "${editedTask.title}" was updated directly.`,
               read: true,
               link: `taskDetail/${editedTask.id}`
             });
+            
+            // Notify assigned person if they're different and it's not the CEO making the change
+            if (currentUser.role !== 'CEO' && editedTask.assignedToId !== currentUser.id) {
+              await addNotification({
+                userId: editedTask.assignedToId,
+                message: `Task "${editedTask.title}" has been updated by the task assigner.`,
+                read: false,
+                link: `taskDetail/${editedTask.id}`
+              });
+            }
           } else {
             console.error('❌ Failed to edit task - no data returned');
           }
@@ -1038,10 +1071,7 @@ function App() {
           console.error('❌ Error editing task:', error);
         }
      } else {
-        // Non-CEO users need approval for task changes
-        const originalTask = tasks.find(t => t.id === editedTask.id);
-        if (!originalTask) return;
-
+        // Task assigner editing started task or other users - need CEO approval
         const changes: Partial<Task> = {};
         const originalChanges: Partial<Task> = {};
         
@@ -1054,6 +1084,11 @@ function App() {
         });
 
         if (Object.keys(changes).length === 0) return;
+
+        const approvalReason = isTaskAssigner ? 
+          '(task has been started)' : 
+          '(not task assigner)';
+        console.log(`📋 Sending task edit for CEO approval ${approvalReason}`);
 
         const newUpdate: TaskPendingUpdate = {
             id: `update_${new Date().getTime()}`,
@@ -1184,6 +1219,60 @@ function App() {
   const handleDeleteTask = useCallback(async (taskId: string) => {
     console.log('🗑️ Deleting task:', taskId);
     
+    if (!currentUser) {
+      console.error('❌ No current user found');
+      return;
+    }
+    
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) {
+      console.error('❌ Task not found:', taskId);
+      return;
+    }
+    
+    // Check permissions
+    const isTaskAssigner = currentUser.id === task.assignedById;
+    const isCeo = currentUser.role === 'CEO';
+    
+    // Only task assigner and CEO can delete tasks
+    if (!isTaskAssigner && !isCeo) {
+      console.error('❌ User does not have permission to delete this task');
+      return;
+    }
+    
+    // If task has moved out of "To Do" status, only CEO can delete directly
+    if (task.status !== TaskStatus.ToDo && !isCeo) {
+      console.log('📋 Task has started - sending delete request for CEO approval');
+      
+      // Create a pending update for deletion
+      const deleteRequest: TaskPendingUpdate = {
+        id: `delete_${new Date().getTime()}`,
+        type: 'task',
+        itemId: taskId,
+        requestedBy: currentUser.id,
+        requesterName: currentUser.name,
+        requestedAt: new Date().toISOString(),
+        data: { _action: 'delete' }, // Special marker for delete requests
+        originalData: task,
+        status: 'pending',
+      };
+      
+      setPendingUpdates(prev => [...prev, deleteRequest]);
+      
+      // Notify CEO
+      const ceo = teammates.find(e => e.role === 'CEO');
+      if (ceo) {
+        await addNotification({
+          userId: ceo.id,
+          message: `${currentUser.name} requested to delete task "${task.title}" (task has been started).`,
+          read: false,
+          link: 'approvals'
+        });
+      }
+      return;
+    }
+    
+    // Direct deletion allowed (CEO or task assigner for unstarted tasks)
     try {
       // Delete task from database
       const success = await DatabaseOperations.deleteTask(taskId);
@@ -1192,6 +1281,13 @@ function App() {
         console.log('✅ Task deleted successfully from database');
         // Remove from local state only if database deletion succeeds
         setTasks(prev => prev.filter(item => item.id !== taskId));
+        
+        await addNotification({
+          userId: currentUser.id,
+          message: `Task "${task.title}" was deleted successfully.`,
+          read: true,
+          link: 'tasks'
+        });
       } else {
         console.error('❌ Failed to delete task - operation returned false');
       }
@@ -1199,7 +1295,7 @@ function App() {
       console.error('❌ Error deleting task:', error);
       // Could show user-friendly error message here
     }
-  }, []);
+  }, [currentUser, tasks, teammates, addNotification]);
 
   // Task Review and Approval Handlers
   const handleApproveTask = useCallback(async (taskId: string) => {
@@ -1397,7 +1493,7 @@ function App() {
     setComments(prev => [...prev, newComment]);
   }, [currentUser]);
 
-  const handleApproveUpdate = useCallback((updateId: string) => {
+  const handleApproveUpdate = useCallback(async (updateId: string) => {
     const update = pendingUpdates.find(u => u.id === updateId);
     if (!update || !currentUser) return;
 
@@ -1424,7 +1520,27 @@ function App() {
 
         setProjects(prev => prev.map(p => p.id === update.itemId ? updatedData : p));
     } else if (update.type === 'task') {
-        setTasks(prev => prev.map(t => t.id === update.itemId ? { ...t, ...update.data } : t));
+        // Check if this is a deletion request
+        if ((update.data as any)._action === 'delete') {
+          // Handle task deletion
+          const success = await DatabaseOperations.deleteTask(update.itemId);
+          if (success) {
+            setTasks(prev => prev.filter(t => t.id !== update.itemId));
+            // Send notification to requester
+            await addNotification({
+              userId: update.requestedBy,
+              message: `Your request to delete task "${(update.originalData as Task).title}" has been approved.`,
+              read: false,
+              link: 'tasks'
+            });
+          }
+        } else {
+          // Handle task update
+          const result = await DatabaseOperations.updateTask({ ...tasks.find(t => t.id === update.itemId), ...update.data } as Task);
+          if (result) {
+            setTasks(prev => prev.map(t => t.id === update.itemId ? result : t));
+          }
+        }
     } else if (update.type === 'teammate') {
         setTeammates(prev => prev.map(t =>
             t.id === update.itemId ? { ...t, role: update.data.role } : t
