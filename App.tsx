@@ -1203,6 +1203,130 @@ function App() {
       // Could show user-friendly error message here
     }
   }, []);
+
+  // Task Review and Approval Handlers
+  const handleApproveTask = useCallback(async (taskId: string) => {
+    console.log('✅ Approving task:', taskId);
+    
+    if (!currentUser) {
+      console.error('❌ No current user found');
+      return;
+    }
+    
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) {
+      console.error('❌ Task not found:', taskId);
+      return;
+    }
+    
+    const updatedTask = {
+      ...task,
+      status: TaskStatus.Completed
+    };
+    
+    try {
+      // Update task status in database
+      const result = await DatabaseOperations.updateTask(updatedTask);
+      
+      if (result) {
+        console.log('✅ Task approved and marked as completed:', result);
+        // Update local state
+        setTasks(prev => prev.map(t => t.id === taskId ? result : t));
+        
+        // Notify the task assignee
+        const assignee = teammates.find(t => t.id === task.assignedToId);
+        if (assignee) {
+          await addNotification({
+            userId: assignee.id,
+            message: `Your task "${task.title}" has been approved and marked as completed!`,
+            read: false,
+            link: `taskDetail/${task.id}`
+          });
+        }
+      } else {
+        console.error('❌ Failed to approve task - no data returned');
+      }
+    } catch (error) {
+      console.error('❌ Error approving task:', error);
+    }
+  }, [tasks, teammates, currentUser, addNotification]);
+  
+  const handleRequestRevision = useCallback(async (taskId: string, revisionMessage?: string) => {
+    console.log('🔄 Requesting revision for task:', taskId);
+    
+    if (!currentUser) {
+      console.error('❌ No current user found');
+      return;
+    }
+    
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) {
+      console.error('❌ Task not found:', taskId);
+      return;
+    }
+    
+    const updatedTask = {
+      ...task,
+      status: TaskStatus.RevisionRequired
+    };
+    
+    try {
+      // Update task status in database
+      const result = await DatabaseOperations.updateTask(updatedTask);
+      
+      if (result) {
+        console.log('✅ Task marked for revision:', result);
+        // Update local state
+        setTasks(prev => prev.map(t => t.id === taskId ? result : t));
+        
+        // Notify the task assignee
+        const assignee = teammates.find(t => t.id === task.assignedToId);
+        if (assignee) {
+          const message = revisionMessage 
+            ? `Your task "${task.title}" requires revision: ${revisionMessage}`
+            : `Your task "${task.title}" requires revision. Please review and resubmit.`;
+          
+          await addNotification({
+            userId: assignee.id,
+            message: message,
+            read: false,
+            link: `taskDetail/${task.id}`
+          });
+        }
+        
+        // Notify other reviewers (CEO and task assigner if different)
+        const reviewers = [];
+        
+        // Add CEO
+        const ceo = teammates.find(t => t.role === 'CEO');
+        if (ceo && ceo.id !== currentUser.id && ceo.id !== assignee?.id) {
+          reviewers.push(ceo);
+        }
+        
+        // Add task assigner if different from CEO and current user
+        const assigner = teammates.find(t => t.id === task.assignedById);
+        if (assigner && assigner.id !== currentUser.id && assigner.id !== ceo?.id && assigner.id !== assignee?.id) {
+          reviewers.push(assigner);
+        }
+        
+        // Send notifications to other reviewers
+        const reviewerNotifications = reviewers.map(async (reviewer) => {
+          return addNotification({
+            userId: reviewer.id,
+            message: `${currentUser.name} requested revision for task "${task.title}".`,
+            read: false,
+            link: `taskDetail/${task.id}`
+          });
+        });
+        
+        await Promise.all(reviewerNotifications);
+      } else {
+        console.error('❌ Failed to request revision - no data returned');
+      }
+    } catch (error) {
+      console.error('❌ Error requesting revision:', error);
+    }
+  }, [tasks, teammates, currentUser, addNotification]);
   
   const handleLogTime = useCallback((log: Omit<TimeLog, 'id'>) => {
     setTimeLogs(prev => [{ ...log, id: `log_${new Date().getTime()}` } as TimeLog, ...prev]);
@@ -1462,6 +1586,8 @@ function App() {
             onAddComment={handleAddComment}
             onUpdateTask={handleUpdateTask}
             onRateTask={handleRateTask}
+            onApproveTask={handleApproveTask}
+            onRequestRevision={handleRequestRevision}
             onNavClick={handleNavClick}
         />;
       }

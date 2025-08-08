@@ -93,10 +93,12 @@ const emptyTask: Omit<Task, 'id' | 'timeSpentSeconds' | 'timerStartTime' | 'assi
   clientId: '',
 };
 
-const statusColors: { [key in TaskStatus]: 'gray' | 'blue' | 'green' } = {
+const statusColors: { [key in TaskStatus]: 'gray' | 'blue' | 'green' | 'yellow' | 'red' } = {
   [TaskStatus.ToDo]: 'gray',
   [TaskStatus.InProgress]: 'blue',
-  [TaskStatus.Done]: 'green',
+  [TaskStatus.UnderReview]: 'yellow',
+  [TaskStatus.RevisionRequired]: 'red',
+  [TaskStatus.Completed]: 'green',
 };
 
 const priorityColors: { [key in TaskPriority]: 'green' | 'yellow' | 'red' } = {
@@ -260,7 +262,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
     if(reportingTask) {
         onUpdateTask({
             ...reportingTask,
-            status: TaskStatus.Done,
+            status: TaskStatus.UnderReview,
             completionReport: completionReport,
             workExperience: workExperience,
             suggestions: suggestions,
@@ -321,7 +323,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
               <tbody>
                 {userTasks.map(task => {
                   const isPending = pendingUpdates.some(p => p.type === 'task' && p.itemId === task.id);
-                  const isComplete = task.status === TaskStatus.Done;
+                  const isComplete = task.status === TaskStatus.Completed;
                   const canRateAsCeo = isCeo && isComplete;
                   const canRateAsAssigner = currentUser.id === task.assignedById && isComplete;
                   const assignerRating = task.ratings?.assigner || 0;
@@ -376,8 +378,8 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                     </td>
                     <td className="p-4">
                       <div className="flex items-center justify-center space-x-2">
-                          {/* Task timer controls - only visible to assigned teammate or CEO */}
-                          {(task.assignedToId === currentUser.id || isCeo) && task.status !== TaskStatus.Done && (
+                          {/* Task timer controls - only visible to assigned teammate or CEO for active tasks */}
+                          {(task.assignedToId === currentUser.id || isCeo) && [TaskStatus.ToDo, TaskStatus.InProgress].includes(task.status) && (
                           <>
                               {task.status === TaskStatus.ToDo && (
                               <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded">Start</button>
@@ -416,7 +418,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
       <div className="md:hidden space-y-4">
         {userTasks.map(task => {
           const isPending = pendingUpdates.some(p => p.type === 'task' && p.itemId === task.id);
-          const isComplete = task.status === TaskStatus.Done;
+          const isComplete = task.status === TaskStatus.Completed;
           const canRateAsCeo = isCeo && isComplete;
           const canRateAsAssigner = currentUser.id === task.assignedById && isComplete;
           const assignerRating = task.ratings?.assigner || 0;
@@ -458,8 +460,8 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
               </div>
 
               <div className="mt-4 pt-3 border-t border-gray-700 flex items-center justify-center space-x-2 flex-wrap gap-2">
-                {/* Task timer controls - only visible to assigned teammate or CEO */}
-                {(task.assignedToId === currentUser.id || isCeo) && task.status !== TaskStatus.Done && (
+                {/* Task timer controls - only visible to assigned teammate or CEO for active tasks */}
+                {(task.assignedToId === currentUser.id || isCeo) && [TaskStatus.ToDo, TaskStatus.InProgress].includes(task.status) && (
                   <>
                       {task.status === TaskStatus.ToDo && (
                       <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded">Start</button>

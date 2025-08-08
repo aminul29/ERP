@@ -6,10 +6,12 @@ import { Badge } from './ui/Badge';
 import { StarRating } from './ui/StarRating';
 import { Modal } from './ui/Modal';
 
-const statusColors: { [key in TaskStatus]: 'gray' | 'blue' | 'green' } = {
+const statusColors: { [key in TaskStatus]: 'gray' | 'blue' | 'green' | 'yellow' | 'red' } = {
   [TaskStatus.ToDo]: 'gray',
   [TaskStatus.InProgress]: 'blue',
-  [TaskStatus.Done]: 'green',
+  [TaskStatus.UnderReview]: 'yellow',
+  [TaskStatus.RevisionRequired]: 'red',
+  [TaskStatus.Completed]: 'green',
 };
 
 const priorityColors: { [key in TaskPriority]: 'green' | 'yellow' | 'red' } = {
@@ -108,10 +110,12 @@ interface TaskDetailProps {
     onAddComment: (parentId: string, text: string) => void;
     onUpdateTask: (task: Task) => void;
     onRateTask: (taskId: string, rating: number, rater: 'assigner' | 'ceo') => void;
+    onApproveTask?: (taskId: string) => void;
+    onRequestRevision?: (taskId: string, revisionMessage?: string) => void;
     onNavClick: (view: string) => void;
 }
 
-export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, allTeammates, currentUser, comments, updateHistory, onAddComment, onUpdateTask, onRateTask, onNavClick }) => {
+export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, allTeammates, currentUser, comments, updateHistory, onAddComment, onUpdateTask, onRateTask, onApproveTask, onRequestRevision, onNavClick }) => {
     const [newComment, setNewComment] = useState('');
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [completionReport, setCompletionReport] = useState('');
@@ -123,9 +127,13 @@ const [driveLink, setDriveLink] = useState('');
     const assignedBy = allTeammates.find(t => t.id === task.assignedById);
     const isCeo = currentUser.role === 'CEO';
     const isManager = ['HR and Admin', 'CEO', 'Lead Web Developer', 'SMM and Design Lead', 'Sales and PR Lead', 'Lead SEO Expert'].includes(currentUser.role);
-    const isComplete = task.status === TaskStatus.Done;
+    const isComplete = task.status === TaskStatus.Completed;
     const canRateAsCeo = isCeo && isComplete;
     const canRateAsAssigner = currentUser.id === task.assignedById && isComplete;
+    
+    // Review permissions - CEO and task assigner can review tasks
+    const canReview = (isCeo || currentUser.id === task.assignedById) && task.status === TaskStatus.UnderReview;
+    const needsRevision = task.status === TaskStatus.RevisionRequired && currentUser.id === task.assignedToId;
 
 
     const handleCommentSubmit = (e: React.FormEvent) => {
@@ -193,7 +201,7 @@ const [driveLink, setDriveLink] = useState('');
         }
         onUpdateTask({
             ...taskToSubmit,
-            status: TaskStatus.Done,
+            status: TaskStatus.UnderReview,
             completionReport: completionReport,
             workExperience: workExperience,
             suggestions: suggestions,
@@ -232,9 +240,9 @@ const [driveLink, setDriveLink] = useState('');
                             <div className="col-span-full"><p className="text-gray-400">Divisions</p><p className="font-medium text-white">{task.divisions?.join(', ') || 'N/A'}</p></div>
                         </div>
                     </Card>
-                    {isComplete && (task.completionReport || task.workExperience || task.suggestions || task.driveLink) && (
+                    {(isComplete || task.status === TaskStatus.UnderReview) && (task.completionReport || task.workExperience || task.suggestions || task.driveLink) && (
                          <Card>
-                            <h3 className="text-xl font-semibold text-white mb-4">Completion Report</h3>
+                            <h3 className="text-xl font-semibold text-white mb-4">{task.status === TaskStatus.UnderReview ? 'Submitted Report - Awaiting Review' : 'Completion Report'}</h3>
                             {task.completionReport && (
                               <div className="mb-4">
                                 <p className="text-sm text-gray-400 mb-1">Task Accomplishment</p>
@@ -270,6 +278,31 @@ const [driveLink, setDriveLink] = useState('');
                             )}
                         </Card>
                     )}
+                    
+                    {/* Task Review UI - shown to reviewers when task is under review */}
+                    {canReview && onApproveTask && onRequestRevision && (
+                        <Card>
+                            <h3 className="text-xl font-semibold text-white mb-4">Task Review</h3>
+                            <p className="text-gray-300 mb-4">This task has been submitted for review. Please review the completion report above and decide whether to approve or request revision.</p>
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <button 
+                                    onClick={() => onApproveTask(task.id)}
+                                    className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                                >
+                                    ✓ Approve & Complete Task
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        const message = prompt('Optional: Provide feedback for revision (leave empty for generic message):');
+                                        onRequestRevision(task.id, message || undefined);
+                                    }}
+                                    className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                                >
+                                    ↺ Request Revision
+                                </button>
+                            </div>
+                        </Card>
+                    )}
                 </div>
                 
                 {/* Right Column */}
@@ -283,8 +316,8 @@ const [driveLink, setDriveLink] = useState('');
                         <div className="w-full bg-gray-700 rounded-full h-2.5 mt-4">
                             <div className="bg-primary-500 h-2.5 rounded-full" style={{ width: `${Math.min(100, task.allocatedTimeInSeconds ? ((task.timeSpentSeconds + (task.timerStartTime ? (Date.now() - new Date(task.timerStartTime).getTime()) / 1000 : 0)) / task.allocatedTimeInSeconds) * 100 : 0)}%` }}></div>
                         </div>
-                        {/* Task timer controls - only visible to assigned teammate or CEO */}
-                        {(currentUser.id === task.assignedToId || isCeo) && task.status !== TaskStatus.Done && (
+                        {/* Task timer controls - only visible to assigned teammate and only for To Do/In Progress */}
+                        {currentUser.id === task.assignedToId && (task.status === TaskStatus.ToDo || task.status === TaskStatus.InProgress) && (
                             <div className="mt-6 flex items-center justify-center space-x-3">
                                 {task.status === TaskStatus.ToDo && (
                                     <button onClick={() => handleTimerAction('start')} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Start Task</button>
@@ -295,7 +328,17 @@ const [driveLink, setDriveLink] = useState('');
                                 {task.status === TaskStatus.InProgress && !task.timerStartTime && (
                                     <button onClick={() => handleTimerAction('start')} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Resume Timer</button>
                                 )}
-                                <button onClick={handleMarkAsDone} className="bg-primary-500 hover:bg-primary-600 text-white font-bold py-2 px-4 rounded-lg">Mark as Done</button>
+                                <button onClick={handleMarkAsDone} className="bg-primary-500 hover:bg-primary-600 text-white font-bold py-2 px-4 rounded-lg">Submit for Review</button>
+                            </div>
+                        )}
+                        
+                        {/* Revision required message */}
+                        {needsRevision && (
+                            <div className="mt-6 p-4 bg-red-900/20 border border-red-500/30 rounded-lg">
+                                <p className="text-red-300 text-center font-medium mb-3">This task requires revision. Please review the feedback and resubmit.</p>
+                                <div className="flex justify-center">
+                                    <button onClick={handleMarkAsDone} className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg">Resubmit for Review</button>
+                                </div>
                             </div>
                         )}
                     </Card>

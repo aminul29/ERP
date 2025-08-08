@@ -2,7 +2,9 @@
 export enum TaskStatus {
   ToDo = 'To Do',
   InProgress = 'In Progress',
-  Done = 'Done',
+  UnderReview = 'Under Review',
+  RevisionRequired = 'Revision Required',
+  Completed = 'Completed',
 }
 
 export enum TaskPriority {
