@@ -42,12 +42,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, tasks, teammates
   const totalProjects = projects.length;
   const ongoingProjects = projects.filter(p => {
     const projectTasks = tasks.filter(t => t.projectId === p.id);
-    return projectTasks.some(t => t.status !== TaskStatus.Done);
+    return projectTasks.some(t => t.status !== TaskStatus.Completed);
   }).length;
 
-  const pendingTasks = tasks.filter(t => t.status !== TaskStatus.Done).length;
+  const pendingTasks = tasks.filter(t => t.status !== TaskStatus.Completed).length;
   const myOpenTasks = useMemo(() => {
-    return tasks.filter(t => t.assignedToId === currentUser.id && t.status !== TaskStatus.Done).length;
+    return tasks.filter(t => t.assignedToId === currentUser.id && t.status !== TaskStatus.Completed).length;
   }, [tasks, currentUser.id]);
   
   const weeklyTimeData = useMemo(() => {
@@ -67,14 +67,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, tasks, teammates
   }, [timeLogs, teammates]);
 
   const recentCompletedTasks = tasks
-    .filter(t => t.status === TaskStatus.Done)
+    .filter(t => t.status === TaskStatus.Completed)
     .sort((a, b) => new Date(b.deadline).getTime() - new Date(a.deadline).getTime())
     .slice(0, 5);
     
   const getProjectProgress = (projectId: string) => {
     const projectTasks = tasks.filter(t => t.projectId === projectId);
     if (projectTasks.length === 0) return 0;
-    const completedTasks = projectTasks.filter(t => t.status === TaskStatus.Done).length;
+    const completedTasks = projectTasks.filter(t => t.status === TaskStatus.Completed).length;
     return Math.round((completedTasks / projectTasks.length) * 100);
   };
 
@@ -103,7 +103,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, tasks, teammates
       <h1 className="text-3xl font-bold text-white">Dashboard</h1>
       
       {/* Console Error Display */}
-      <ConsoleErrorDisplay />
+      {/* <ConsoleErrorDisplay /> */}
       
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

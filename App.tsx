@@ -19,9 +19,6 @@ import { PerformanceEvaluation } from './components/PerformanceEvaluation';
 import { ProjectDetail } from './components/ProjectDetail';
 import { TaskDetail } from './components/TaskDetail';
 import { ToastContainer } from './components/ToastContainer';
-import { DatabaseTest } from './components/DatabaseTest';
-import { NotificationTest } from './components/NotificationTest';
-import { ConsoleLogger } from './components/ConsoleLogger';
 import { DatabaseOperations } from './lib/db-operations';
 import { loadFromDatabase, initializeDatabase } from './lib/db-service';
 import { supabase } from './lib/supabase';
@@ -1509,9 +1506,6 @@ function App() {
       case 'dashboard':
         return (
           <div className="space-y-6">
-            <DatabaseTest />
-            <NotificationTest />
-            <ConsoleLogger />
             <Dashboard
               projects={projects} 
               tasks={tasks} 
