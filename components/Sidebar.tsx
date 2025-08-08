@@ -15,10 +15,10 @@ interface SidebarProps {
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: ICONS.dashboard, allowedRoles: [] },
   { id: 'profile', label: 'My Profile', icon: ICONS.profile, allowedRoles: [] },
-  { id: 'attendance', label: 'Attendance', icon: ICONS.attendance, allowedRoles: [] },
+  { id: 'attendance', label: 'Attendance', icon: ICONS.attendance, allowedRoles: ['CEO', 'HR and Admin'] },
   { id: 'tasks', label: 'Tasks', icon: ICONS.tasks, allowedRoles: [] },
-  { id: 'projects', label: 'Projects', icon: ICONS.projects, allowedRoles: [] },
-  { id: 'time', label: 'Time Tracking', icon: ICONS.time, allowedRoles: [] },
+  { id: 'projects', label: 'Projects', icon: ICONS.projects, allowedRoles: ['CEO', 'HR and Admin'] },
+  { id: 'time', label: 'Time Tracking', icon: ICONS.time, allowedRoles: ['CEO', 'HR and Admin'] },
   { id: 'performance', label: 'Performance', icon: ICONS.performance, allowedRoles: ['CEO', 'HR and Admin', 'Lead Web Developer', 'SMM and Design Lead', 'Sales and PR Lead', 'Lead SEO Expert'] },
   { id: 'teammates', label: 'Teammates', icon: ICONS.teammates, allowedRoles: ['HR and Admin'] },
   { id: 'clients', label: 'Clients', icon: ICONS.clients, allowedRoles: ['Sales and PR Lead'] },
