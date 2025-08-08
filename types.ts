@@ -115,6 +115,7 @@ export interface Task {
   workExperience?: 'smooth' | 'issues';
   suggestions?: string;
   completionFiles?: string[];
+  driveLink?: string;
   allocatedTimeInSeconds: number;
   timeSpentSeconds: number;
   timerStartTime?: string;

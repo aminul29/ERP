@@ -60,6 +60,7 @@ export const mapTask = (row: any): Task => ({
   workExperience: row.work_experience,
   suggestions: row.suggestions,
   completionFiles: row.completion_files || [],
+  driveLink: row.drive_link,
 allocatedTimeInSeconds: row.allocated_time_in_seconds,
   timeSpentSeconds: row.time_spent_seconds,
   timerStartTime: row.timer_start_time,

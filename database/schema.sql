@@ -64,6 +64,7 @@ CREATE TABLE tasks (
     work_experience VARCHAR(50),
     suggestions TEXT,
     completion_files JSONB DEFAULT '[]',
+    drive_link TEXT,
     allocated_time_in_seconds INTEGER DEFAULT 0,
     time_spent_seconds INTEGER DEFAULT 0,
     timer_start_time TIMESTAMP WITH TIME ZONE,

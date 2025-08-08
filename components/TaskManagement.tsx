@@ -499,7 +499,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                   onChange={(html) => setEditingTask(prev => prev ? { ...prev, description: html } : prev)}
                   placeholder="Describe the task details..."
                 />
-              </div>
+                </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                       <label className="block text-sm font-medium text-gray-300 mb-1">Project (Optional)</label>
