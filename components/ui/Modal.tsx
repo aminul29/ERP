@@ -7,15 +7,20 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  closeOnOutsideClick?: boolean;
 }
 
-export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children }) => {
+export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, closeOnOutsideClick = true }) => {
   if (!isOpen) return null;
+
+  const handleBackdropClick = () => {
+    if (closeOnOutsideClick) onClose();
+  };
 
   return (
     <div 
       className="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-center p-4"
-      onClick={onClose}
+      onClick={handleBackdropClick}
     >
       <div 
         className="bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl border border-gray-700 flex flex-col max-h-[90vh]"

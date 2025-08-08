@@ -6,6 +6,7 @@ import { Modal } from './ui/Modal';
 import { Badge } from './ui/Badge';
 import { ICONS } from '../constants';
 import { StarRating } from './ui/StarRating';
+import { RichTextEditor } from './ui/RichTextEditor';
 
 const formatTime = (totalSeconds: number): string => {
     // Handle invalid numbers
@@ -115,7 +116,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
   const [completionReport, setCompletionReport] = useState('');
   const [workExperience, setWorkExperience] = useState<'smooth' | 'issues'>('smooth');
   const [suggestions, setSuggestions] = useState('');
-  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [driveLink, setDriveLink] = useState('');
   
   const [divisionSearch, setDivisionSearch] = useState('');
   const [isDivisionDropdownOpen, setIsDivisionDropdownOpen] = useState(false);
@@ -157,7 +158,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
     setCompletionReport(task.completionReport || '');
     setWorkExperience(task.workExperience || 'smooth');
     setSuggestions(task.suggestions || '');
-    setAttachedFiles([]);
+    setDriveLink(task.driveLink || '');
     setIsReportModalOpen(true);
   };
   
@@ -167,7 +168,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
     setCompletionReport('');
     setWorkExperience('smooth');
     setSuggestions('');
-    setAttachedFiles([]);
+    setDriveLink('');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -217,6 +218,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
             : [...currentDivisions, division];
         return { ...prev, divisions: newDivisions };
     });
+    setIsDivisionDropdownOpen(false);
   };
 
   const filteredDivisions = useMemo(() => {
@@ -252,15 +254,6 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
     handleOpenReportModal(taskToReport);
   };
   
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-        setAttachedFiles(prev => [...prev, ...Array.from(e.target.files!)]);
-    }
-  };
-
-  const handleRemoveFile = (fileName: string) => {
-    setAttachedFiles(prev => prev.filter(f => f.name !== fileName));
-  };
 
   const handleReportSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -271,7 +264,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
             completionReport: completionReport,
             workExperience: workExperience,
             suggestions: suggestions,
-            completionFiles: attachedFiles.map(f => f.name)
+            driveLink: driveLink
         });
         handleCloseReportModal();
     }
@@ -495,11 +488,18 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
         })}
       </div>
       
-      <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingTask && 'id' in editingTask ? 'Edit Task' : 'Assign New Task'}>
+      <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingTask && 'id' in editingTask ? 'Edit Task' : 'Assign New Task'} closeOnOutsideClick={false}>
           {editingTask && (
             <form onSubmit={handleSubmit} className="space-y-4">
               <input name="title" value={editingTask.title} onChange={handleChange} placeholder="Task Title" className="w-full p-2 bg-gray-700 rounded border border-gray-600" required />
-              <textarea name="description" value={editingTask.description} onChange={handleChange} placeholder="Description" className="w-full p-2 bg-gray-700 rounded border border-gray-600" rows={3}></textarea>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
+                <RichTextEditor
+                  value={editingTask.description || ''}
+                  onChange={(html) => setEditingTask(prev => prev ? { ...prev, description: html } : prev)}
+                  placeholder="Describe the task details..."
+                />
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                       <label className="block text-sm font-medium text-gray-300 mb-1">Project (Optional)</label>
@@ -634,7 +634,6 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                     </label>
                   </div>
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">Suggestions for Improvement</label>
                   <textarea 
@@ -643,39 +642,20 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                       onChange={e => setSuggestions(e.target.value)}
                       placeholder="Any suggestions for the project, task, or work environment?" 
                       className="w-full p-2 bg-gray-700 rounded border border-gray-600 min-h-[80px]" 
-                  ></textarea>
+                  >
+                  </textarea>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Attach Files / Screenshots</label>
-                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-600 border-dashed rounded-md">
-                    <div className="space-y-1 text-center">
-                      <svg className="mx-auto h-12 w-12 text-gray-500" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                      <div className="flex text-sm text-gray-400">
-                        <label htmlFor="file-upload-tasks" className="relative cursor-pointer bg-gray-800 rounded-md font-medium text-primary-400 hover:text-primary-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-offset-gray-900 focus-within:ring-primary-500">
-                          <span>Upload a file</span>
-                          <input id="file-upload-tasks" name="file-upload" type="file" className="sr-only" multiple onChange={handleFileChange} />
-                        </label>
-                        <p className="pl-1">or drag and drop</p>
-                      </div>
-                      <p className="text-xs text-gray-500">PNG, JPG, PDF, etc.</p>
-                    </div>
-                  </div>
-                  {attachedFiles.length > 0 && (
-                      <div className="mt-4 space-y-2">
-                          <h4 className="text-sm font-medium text-gray-300">Attached files:</h4>
-                          <ul className="divide-y divide-gray-700 border border-gray-700 rounded-md">
-                              {attachedFiles.map(file => (
-                                  <li key={file.name} className="px-3 py-2 flex items-center justify-between text-sm">
-                                      <span className="text-gray-200 truncate">{file.name}</span>
-                                      <button type="button" onClick={() => handleRemoveFile(file.name)} className="text-red-400 hover:text-red-300">
-                                         {ICONS.trash}
-                                      </button>
-                                  </li>
-                              ))}
-                          </ul>
-                      </div>
-                  )}
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Google Drive Link</label>
+                  <input 
+                      type="url"
+                      value={driveLink}
+                      onChange={e => setDriveLink(e.target.value)}
+                      placeholder="https://drive.google.com/file/d/..." 
+                      className="w-full p-2 bg-gray-700 rounded border border-gray-600" 
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Paste a Google Drive URL to your files or folder</p>
                 </div>
 
                 <div className="flex justify-end pt-4">

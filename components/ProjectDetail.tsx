@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { Project, Task, Client, Teammate, Comment, PendingUpdate, TaskStatus, TaskPriority, ProjectPendingUpdate } from '../types';
 import { Card } from './ui/Card';
 import { Badge } from './ui/Badge';
+import { RichTextEditor } from './ui/RichTextEditor';
 import { StarRating } from './ui/StarRating';
 import { ICONS } from '../constants';
 import { Modal } from './ui/Modal';
@@ -527,10 +528,17 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, tasks, cl
                 </div>
             </div>
 
-            <Modal isOpen={isTaskModalOpen} onClose={handleCloseTaskModal} title="Assign New Task">
+<Modal isOpen={isTaskModalOpen} onClose={handleCloseTaskModal} title="Assign New Task" closeOnOutsideClick={false}>
               <form onSubmit={handleTaskSubmit} className="space-y-4">
                   <input name="title" value={newTask.title} onChange={handleNewTaskChange} placeholder="Task Title" className="w-full p-2 bg-gray-700 rounded border border-gray-600" required />
-                  <textarea name="description" value={newTask.description} onChange={handleNewTaskChange} placeholder="Description" className="w-full p-2 bg-gray-700 rounded border border-gray-600" rows={3}></textarea>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
+                    <RichTextEditor
+                      value={newTask.description || ''}
+                      onChange={(html) => setNewTask(prev => ({ ...prev, description: html }))}
+                      placeholder="Describe the task details..."
+                    />
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
                           <label className="block text-sm font-medium text-gray-300 mb-1">Assign To</label>
