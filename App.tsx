@@ -1267,7 +1267,8 @@ function App() {
     
     const updatedTask = {
       ...task,
-      status: TaskStatus.RevisionRequired
+      status: TaskStatus.RevisionRequired,
+      revisionNote: revisionMessage || 'Please review and make necessary revisions.'
     };
     
     try {

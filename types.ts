@@ -121,6 +121,7 @@ export interface Task {
   allocatedTimeInSeconds: number;
   timeSpentSeconds: number;
   timerStartTime?: string;
+  revisionNote?: string; // Added for storing revision feedback
   ratings?: {
     assigner?: number;
     ceo?: number;

@@ -5,6 +5,7 @@ import { Card } from './ui/Card';
 import { Badge } from './ui/Badge';
 import { StarRating } from './ui/StarRating';
 import { Modal } from './ui/Modal';
+import { RevisionModal } from './RevisionModal';
 
 const statusColors: { [key in TaskStatus]: 'gray' | 'blue' | 'green' | 'yellow' | 'red' } = {
   [TaskStatus.ToDo]: 'gray',
@@ -118,10 +119,11 @@ interface TaskDetailProps {
 export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, allTeammates, currentUser, comments, updateHistory, onAddComment, onUpdateTask, onRateTask, onApproveTask, onRequestRevision, onNavClick }) => {
     const [newComment, setNewComment] = useState('');
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+    const [isRevisionModalOpen, setIsRevisionModalOpen] = useState(false);
     const [completionReport, setCompletionReport] = useState('');
-const [workExperience, setWorkExperience] = useState<'smooth' | 'issues'>('smooth');
+    const [workExperience, setWorkExperience] = useState<'smooth' | 'issues'>('smooth');
     const [suggestions, setSuggestions] = useState('');
-const [driveLink, setDriveLink] = useState('');
+    const [driveLink, setDriveLink] = useState('');
 
     const assignedTo = allTeammates.find(t => t.id === task.assignedToId);
     const assignedBy = allTeammates.find(t => t.id === task.assignedById);
@@ -210,6 +212,22 @@ const [driveLink, setDriveLink] = useState('');
         handleCloseReportModal();
     };
 
+    // Revision modal handlers
+    const handleOpenRevisionModal = () => {
+        setIsRevisionModalOpen(true);
+    };
+
+    const handleCloseRevisionModal = () => {
+        setIsRevisionModalOpen(false);
+    };
+
+    const handleRevisionSubmit = (revisionMessage: string) => {
+        if (onRequestRevision) {
+            onRequestRevision(task.id, revisionMessage);
+        }
+        setIsRevisionModalOpen(false);
+    };
+
 
     return (
         <div className="p-6">
@@ -224,6 +242,31 @@ const [driveLink, setDriveLink] = useState('');
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Left Column */}
                 <div className="lg:col-span-2 space-y-6">
+                    {/* Task Review UI - shown to reviewers when task is under review - MOVED TO FRONT */}
+                    {canReview && onApproveTask && onRequestRevision && (
+                        <Card>
+                            <h3 className="text-xl font-semibold text-white mb-4">⚡ Task Review</h3>
+                            <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-lg p-4 mb-4">
+                                <p className="text-yellow-300 font-medium">🔍 Review Required</p>
+                                <p className="text-gray-300 text-sm mt-1">This task has been submitted for review. Please review the completion report below and decide whether to approve or request revision.</p>
+                            </div>
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <button 
+                                    onClick={() => onApproveTask(task.id)}
+                                    className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                                >
+                                    ✓ Approve & Complete Task
+                                </button>
+                                <button 
+                                    onClick={handleOpenRevisionModal}
+                                    className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+                                >
+                                    ↺ Request Revision
+                                </button>
+                            </div>
+                        </Card>
+                    )}
+                    
                     <Card>
                         <h3 className="text-xl font-semibold text-white mb-2">Description</h3>
                         <p className="text-gray-300 whitespace-pre-wrap">{task.description || 'No description provided.'}</p>
@@ -279,27 +322,16 @@ const [driveLink, setDriveLink] = useState('');
                         </Card>
                     )}
                     
-                    {/* Task Review UI - shown to reviewers when task is under review */}
-                    {canReview && onApproveTask && onRequestRevision && (
+                    {/* Revision Feedback Display - shown to assigned user when task requires revision */}
+                    {needsRevision && task.revisionNote && (
                         <Card>
-                            <h3 className="text-xl font-semibold text-white mb-4">Task Review</h3>
-                            <p className="text-gray-300 mb-4">This task has been submitted for review. Please review the completion report above and decide whether to approve or request revision.</p>
-                            <div className="flex flex-col sm:flex-row gap-3">
-                                <button 
-                                    onClick={() => onApproveTask(task.id)}
-                                    className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition-colors"
-                                >
-                                    ✓ Approve & Complete Task
-                                </button>
-                                <button 
-                                    onClick={() => {
-                                        const message = prompt('Optional: Provide feedback for revision (leave empty for generic message):');
-                                        onRequestRevision(task.id, message || undefined);
-                                    }}
-                                    className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-lg transition-colors"
-                                >
-                                    ↺ Request Revision
-                                </button>
+                            <h3 className="text-xl font-semibold text-white mb-4">🔄 Revision Feedback</h3>
+                            <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4">
+                                <p className="text-red-300 font-medium mb-3">📝 Review Comments</p>
+                                <div className="text-gray-300 bg-gray-900/50 p-3 rounded-md whitespace-pre-wrap">
+                                    {task.revisionNote}
+                                </div>
+                                <p className="text-red-400 text-sm mt-3">Please address the feedback above and resubmit the task.</p>
                             </div>
                         </Card>
                     )}
@@ -465,6 +497,13 @@ const [driveLink, setDriveLink] = useState('');
                 </div>
               </form>
             </Modal>
+            
+            <RevisionModal 
+                isOpen={isRevisionModalOpen}
+                onClose={handleCloseRevisionModal}
+                onSubmit={handleRevisionSubmit}
+                taskTitle={task.title}
+            />
         </div>
     )
 }

@@ -251,6 +251,7 @@ export class DatabaseOperations {
         allocated_time_in_seconds: task.allocatedTimeInSeconds,
         time_spent_seconds: Math.round(task.timeSpentSeconds || 0),
         timer_start_time: task.timerStartTime,
+        revision_note: task.revisionNote,
         ratings: task.ratings || {}
       };
       
@@ -293,6 +294,7 @@ export class DatabaseOperations {
           allocated_time_in_seconds: task.allocatedTimeInSeconds,
           time_spent_seconds: Math.round(task.timeSpentSeconds || 0),
           timer_start_time: task.timerStartTime ?? null,
+          revision_note: task.revisionNote,
           ratings: task.ratings || {}
         })
         .eq('id', task.id)
