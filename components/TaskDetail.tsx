@@ -1,10 +1,12 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { Task, Project, Client, Teammate, Comment, PendingUpdate, TaskStatus, TaskPriority } from '../types';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Task, Project, Client, Teammate, TaskStatus, TaskPriority, PendingUpdate, Comment } from '../types';
 import { Card } from './ui/Card';
 import { Badge } from './ui/Badge';
-import { StarRating } from './ui/StarRating';
 import { Modal } from './ui/Modal';
+import { ICONS } from '../constants';
+import { StarRating } from './ui/StarRating';
+import { formatDeadlineForDisplay } from '../lib/date-utils';
 import { RevisionModal } from './RevisionModal';
 
 const statusColors: { [key in TaskStatus]: 'gray' | 'blue' | 'green' | 'yellow' | 'red' } = {
@@ -99,7 +101,127 @@ const timeAgo = (timestamp: string) => {
     return `${Math.floor(seconds)}s ago`;
 };
 
-// Utility function to strip HTML tags from text
+// Enhanced description display component with line break support
+const TaskDescription: React.FC<{ description: string; isExpanded?: boolean }> = ({ description, isExpanded = false }) => {
+    const [isFullyExpanded, setIsFullyExpanded] = useState(isExpanded);
+    const [showExpandButton, setShowExpandButton] = useState(false);
+    const descriptionRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (descriptionRef.current) {
+            const element = descriptionRef.current;
+            // Check if content is truncated
+            setShowExpandButton(element.scrollHeight > element.clientHeight);
+        }
+    }, [description]);
+
+    if (!description) {
+        return <p className="text-gray-500 italic">No description provided.</p>;
+    }
+
+    // Enhanced text processing that preserves line breaks and handles HTML
+    const processDescription = (text: string): string => {
+        // First, handle HTML content if present
+        let processedText = text;
+        
+        // If it contains HTML tags, extract text content but preserve structure
+        if (text.includes('<')) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = text;
+            
+            // Replace common HTML elements with text equivalents
+            tempDiv.innerHTML = tempDiv.innerHTML
+                .replace(/<br\s*\/?>/gi, '\n')
+                .replace(/<\/p>/gi, '\n\n')
+                .replace(/<p[^>]*>/gi, '')
+                .replace(/<\/div>/gi, '\n')
+                .replace(/<div[^>]*>/gi, '')
+                .replace(/<\/li>/gi, '\n')
+                .replace(/<li[^>]*>/gi, '• ')
+                .replace(/<\/ul>/gi, '\n')
+                .replace(/<ul[^>]*>/gi, '')
+                .replace(/<\/ol>/gi, '\n')
+                .replace(/<ol[^>]*>/gi, '');
+            
+            processedText = tempDiv.textContent || tempDiv.innerText || '';
+        }
+        
+        // Clean up excessive line breaks and whitespace
+        processedText = processedText
+            .replace(/\n\s*\n\s*\n/g, '\n\n') // Replace triple+ line breaks with double
+            .replace(/^\s+|\s+$/g, '') // Trim start and end
+            .replace(/[ \t]+/g, ' '); // Replace multiple spaces/tabs with single space
+        
+        return processedText;
+    };
+
+    const processedDescription = processDescription(description);
+    const isLongContent = processedDescription.length > 300 || processedDescription.split('\n').length > 5;
+
+    return (
+        <div className="space-y-3">
+            <div 
+                ref={descriptionRef}
+                className={`text-gray-300 leading-relaxed transition-all duration-300 ${
+                    isLongContent && !isFullyExpanded 
+                        ? 'max-h-32 overflow-hidden relative' 
+                        : 'max-h-none'
+                }`}
+                style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}
+            >
+                {processedDescription}
+                
+                {/* Gradient fade for truncated content */}
+                {isLongContent && !isFullyExpanded && (
+                    <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-gray-800 to-transparent pointer-events-none" />
+                )}
+            </div>
+            
+            {/* Expand/Collapse button */}
+            {isLongContent && (
+                <button
+                    onClick={() => setIsFullyExpanded(!isFullyExpanded)}
+                    className="text-sm text-primary-400 hover:text-primary-300 font-medium flex items-center gap-1 transition-colors"
+                >
+                    {isFullyExpanded ? (
+                        <>
+                            <span>Show less</span>
+                            <svg className="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                            </svg>
+                        </>
+                    ) : (
+                        <>
+                            <span>Show more</span>
+                            <svg className="w-4 h-4 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </>
+                    )}
+                </button>
+            )}
+            
+            {/* Copy to clipboard button for long descriptions */}
+            {processedDescription.length > 100 && (
+                <button
+                    onClick={() => {
+                        navigator.clipboard.writeText(processedDescription);
+                        // You could add a toast notification here
+                    }}
+                    className="text-xs text-gray-400 hover:text-gray-300 flex items-center gap-1 transition-colors"
+                    title="Copy description to clipboard"
+                >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    <span>Copy</span>
+                </button>
+            )}
+        </div>
+    );
+};
+
+// Utility function to strip HTML tags from text (kept for backward compatibility)
 const stripHtmlTags = (html: string): string => {
     if (!html) return '';
     // Create a temporary div element to parse HTML
@@ -279,14 +401,14 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, a
                     
                     <Card>
                         <h3 className="text-xl font-semibold text-white mb-2">Description</h3>
-                        <p className="text-gray-300 whitespace-pre-wrap">{stripHtmlTags(task.description) || 'No description provided.'}</p>
+                        <TaskDescription description={task.description} />
                     </Card>
                     <Card>
                         <h3 className="text-xl font-semibold text-white mb-4">Details</h3>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                             <div><p className="text-gray-400">Status</p><Badge color={statusColors[task.status]}>{task.status}</Badge></div>
                             <div><p className="text-gray-400">Priority</p><Badge color={priorityColors[task.priority]}>{task.priority}</Badge></div>
-                            <div><p className="text-gray-400">Deadline</p><p className="font-medium text-white">{new Date(task.deadline).toLocaleDateString()}</p></div>
+                            <div><p className="text-gray-400">Deadline</p><p className="font-medium text-white">{formatDeadlineForDisplay(task.deadline)}</p></div>
                             <div><p className="text-gray-400">Assigned To</p><p className="font-medium text-white">{assignedTo?.name || 'N/A'}</p></div>
                             <div><p className="text-gray-400">Assigned By</p><p className="font-medium text-white">{assignedBy?.name || 'N/A'}</p></div>
                             <div><p className="text-gray-400">Client</p><p className="font-medium text-white">{client?.name || 'N/A'}</p></div>

@@ -7,6 +7,7 @@ import { Badge } from './ui/Badge';
 import { ICONS } from '../constants';
 import { StarRating } from './ui/StarRating';
 import { RichTextEditor } from './ui/RichTextEditor';
+import { formatDeadlineForDisplay, formatDeadlineForStorage } from '../lib/date-utils';
 
 const formatTime = (totalSeconds: number): string => {
     // Handle invalid numbers
@@ -200,7 +201,14 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
-    setEditingTask(prev => prev ? { ...prev, [name]: type === 'number' ? parseFloat(value) : value } : null);
+    
+    if (name === 'deadline') {
+      // Convert from YYYY-MM-DD (HTML date input) to DD/MM/YYYY (storage format)
+      const formattedDate = formatDeadlineForStorage(value.split('-').reverse().join('/'));
+      setEditingTask(prev => prev ? { ...prev, deadline: formattedDate } : null);
+    } else {
+      setEditingTask(prev => prev ? { ...prev, [name]: type === 'number' ? parseFloat(value) : value } : null);
+    }
   };
   
   const handleAllocatedTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -352,7 +360,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                     </td>
                     {isManager && <td className="p-4 text-gray-300">{teammates.find(e => e.id === task.assignedToId)?.name}</td>}
                     <td className="p-4 text-gray-300">{projects.find(p => p.id === task.projectId)?.name}</td>
-                    <td className="p-4 text-gray-300">{new Date(task.deadline).toLocaleDateString()}</td>
+                    <td className="p-4 text-gray-300">{formatDeadlineForDisplay(task.deadline)}</td>
                     <td className="p-4"><Badge color={priorityColors[task.priority]}>{task.priority}</Badge></td>
                     <td className="p-4">
                       <div className="flex flex-col space-y-1 items-start">
@@ -456,7 +464,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                     <div><span className="text-gray-400">To: </span>{teammates.find(e => e.id === task.assignedToId)?.name}</div>
                   )}
                   <div><span className="text-gray-400">Project: </span>{projects.find(p => p.id === task.projectId)?.name || 'N/A'}</div>
-                  <div><span className="text-gray-400">Deadline: </span>{new Date(task.deadline).toLocaleDateString()}</div>
+                  <div><span className="text-gray-400">Deadline: </span>{formatDeadlineForDisplay(task.deadline)}</div>
                   <div className="flex items-center space-x-2"><span className="text-gray-400">Status: </span> <Badge color={statusColors[task.status]}>{task.status}</Badge> {isPending && <Badge color="yellow">Pending</Badge>}</div>
               </div>
 
@@ -587,8 +595,8 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                   </div>
 
                   <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1">Deadline</label>
-                      <input name="deadline" type="date" value={editingTask.deadline} onChange={handleChange} className="w-full p-2 bg-gray-700 rounded border border-gray-600" required />
+                      <label className="block text-sm font-medium text-gray-300 mb-1">Deadline (DD/MM/YYYY)</label>
+                      <input name="deadline" type="date" value={formatDeadlineForStorage(editingTask.deadline)} onChange={handleChange} className="w-full p-2 bg-gray-700 rounded border border-gray-600" required />
                   </div>
                   
                   <div>
