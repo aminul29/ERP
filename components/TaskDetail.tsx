@@ -283,7 +283,8 @@ const [driveLink, setDriveLink] = useState('');
                         <div className="w-full bg-gray-700 rounded-full h-2.5 mt-4">
                             <div className="bg-primary-500 h-2.5 rounded-full" style={{ width: `${Math.min(100, task.allocatedTimeInSeconds ? ((task.timeSpentSeconds + (task.timerStartTime ? (Date.now() - new Date(task.timerStartTime).getTime()) / 1000 : 0)) / task.allocatedTimeInSeconds) * 100 : 0)}%` }}></div>
                         </div>
-                        {(currentUser.id === task.assignedToId || isManager) && task.status !== TaskStatus.Done && (
+                        {/* Task timer controls - only visible to assigned teammate or CEO */}
+                        {(currentUser.id === task.assignedToId || isCeo) && task.status !== TaskStatus.Done && (
                             <div className="mt-6 flex items-center justify-center space-x-3">
                                 {task.status === TaskStatus.ToDo && (
                                     <button onClick={() => handleTimerAction('start')} className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Start Task</button>

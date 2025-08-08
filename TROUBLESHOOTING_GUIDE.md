@@ -828,6 +828,303 @@ grep -r "select()" lib/db-operations.ts
 
 ---
 
+### ❌ Error: Missing database column for new features
+
+**Problem**: New feature fields are not saving to database due to missing columns in database schema.
+
+**Symptoms**:
+```
+column "drive_link" of relation "tasks" does not exist
+Bad Request: Unknown column name in database operation
+Feature data not persisting after page refresh
+```
+
+**Root Cause**: Database schema is not updated to include new columns added in application code.
+
+**Solution**:
+```sql
+-- Check if column exists
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name = 'tasks' 
+ORDER BY ordinal_position;
+
+-- Add missing column if needed
+ALTER TABLE tasks ADD COLUMN drive_link TEXT;
+
+-- Verify database operations match schema
+-- ❌ Incorrect - Column doesn't exist yet
+const insertData = {
+  title: task.title,
+  drive_link: task.driveLink  // Column doesn't exist in database
+};
+
+-- ✅ Correct - After adding column to database
+const insertData = {
+  title: task.title,
+  drive_link: task.driveLink  // Now supported in database
+};
+```
+
+**Database Schema Management**:
+```typescript
+// In db-operations.ts, ensure all fields match database columns
+export const createTask = async (task: Omit<Task, 'id'>) => {
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert({
+      title: task.title,
+      description: task.description,
+      // ... other existing fields
+      drive_link: task.driveLink,           // ← New field
+      work_experience: task.workExperience, // ← New field
+      suggestions: task.suggestions,        // ← New field
+      completion_files: task.completionFiles || []
+    })
+    .select()
+    .single();
+    
+  if (error) throw error;
+  return mapTask(data);
+};
+
+// Update mapper to handle new fields
+export const mapTask = (row: any): Task => ({
+  id: row.id,
+  title: row.title,
+  // ... other existing fields
+  driveLink: row.drive_link || undefined,
+  workExperience: row.work_experience || undefined,
+  suggestions: row.suggestions || undefined,
+  completionFiles: row.completion_files || []
+});
+```
+
+**Prevention**:
+- Always update database schema before deploying new features
+- Check schema file (`database/schema.sql`) matches actual database
+- Test database operations in development before production
+- Use database migrations for schema changes
+- Verify all columns exist before adding them to code
+
+**Common New Feature Columns**:
+```sql
+-- Task completion features
+ALTER TABLE tasks ADD COLUMN drive_link TEXT;
+ALTER TABLE tasks ADD COLUMN work_experience VARCHAR(50);
+ALTER TABLE tasks ADD COLUMN suggestions TEXT;
+
+-- Project features
+ALTER TABLE projects ADD COLUMN completion_notes TEXT;
+ALTER TABLE projects ADD COLUMN client_feedback TEXT;
+```
+
+**Applies to**: All new feature development requiring database schema changes.
+
+---
+
+### ❌ Error: File upload replaced with link input not working
+
+**Problem**: UI changed from file upload to link input but form validation or submission is still expecting files.
+
+**Symptoms**:
+```
+Google Drive link not saving to database
+Form validation errors about missing files
+Submit button disabled when link is provided
+```
+
+**Root Cause**: Form handling code still validates or processes file uploads instead of link input.
+
+**Solution**:
+```typescript
+// ❌ Incorrect - Still handling file uploads
+const handleSubmit = () => {
+  if (!completionFiles || completionFiles.length === 0) {
+    setError('Please upload completion files');
+    return;
+  }
+  
+  const formData = {
+    accomplishments,
+    workExperience,
+    suggestions,
+    attachedFiles: completionFiles  // Still expecting files
+  };
+};
+
+// ✅ Correct - Handle Google Drive link
+const handleSubmit = () => {
+  if (!driveLink || driveLink.trim() === '') {
+    setError('Please provide a Google Drive link');
+    return;
+  }
+  
+  const formData = {
+    accomplishments,
+    workExperience,
+    suggestions,
+    driveLink: driveLink.trim()  // Handle link instead
+  };
+};
+
+// Update UI to show link instead of files
+{/* ❌ Incorrect - Still showing file list */}
+{completionFiles && completionFiles.length > 0 && (
+  <div>
+    <h4>Attached Files:</h4>
+    <ul>{completionFiles.map(file => <li key={file}>{file}</li>)}</ul>
+  </div>
+)}
+
+{/* ✅ Correct - Show clickable Google Drive link */}
+{driveLink && (
+  <div>
+    <h4>Google Drive Link:</h4>
+    <a href={driveLink} target="_blank" rel="noopener noreferrer" 
+       className="text-blue-600 hover:underline">
+      {driveLink.length > 50 ? `${driveLink.substring(0, 50)}...` : driveLink}
+    </a>
+  </div>
+)}
+```
+
+**Prevention**:
+- Update all form validation logic when changing input types
+- Test form submission with new input format
+- Update display components to match new data structure
+- Ensure database operations handle new field names
+
+**Applies to**: Any UI changes from file uploads to text/link inputs across all features.
+
+---
+
+### ❌ Error: Unauthorized users can access restricted functionality
+
+**Problem**: UI buttons and controls are visible to users who shouldn't have access to them, leading to security concerns or unintended actions.
+
+**Symptoms**:
+```
+Non-assigned users can see Start/Pause/Done buttons for tasks
+Managers can control task timers for tasks not assigned to them
+Security controls are too permissive
+```
+
+**Root Cause**: Role-based access control logic is too broad or incorrectly implemented in conditional rendering.
+
+**Solution**:
+```typescript
+// ❌ Incorrect - Too permissive access control
+{(currentUser.id === task.assignedToId || isManager) && (
+  <>
+    <button onClick={() => handleTimerAction('start')}>Start</button>
+    <button onClick={() => handleTimerAction('pause')}>Pause</button>
+    <button onClick={() => handleMarkAsDone()}>Done</button>
+  </>
+)}
+
+// ✅ Correct - Restrict to assigned teammate and CEO only
+{(currentUser.id === task.assignedToId || isCeo) && (
+  <>
+    <button onClick={() => handleTimerAction('start')}>Start</button>
+    <button onClick={() => handleTimerAction('pause')}>Pause</button>
+    <button onClick={() => handleMarkAsDone()}>Done</button>
+  </>
+)}
+
+// ✅ Define clear role hierarchies
+const isCeo = currentUser.role === 'CEO';
+const isManager = ['HR and Admin', 'CEO', 'Lead Web Developer', 'SMM and Design Lead', 'Sales and PR Lead', 'Lead SEO Expert'].includes(currentUser.role);
+const isAssignedUser = currentUser.id === task.assignedToId;
+
+// ✅ Use specific permissions for specific actions
+const canControlTimer = isAssignedUser || isCeo;  // Only assigned user or CEO
+const canEditTask = isManager;                     // Any manager can edit
+const canDeleteTask = isCeo;                       // Only CEO can delete
+const canViewTask = isManager || isAssignedUser;   // Managers or assigned user
+
+{canControlTimer && (
+  <div className="timer-controls">
+    {/* Timer buttons only for assigned user or CEO */}
+  </div>
+)}
+
+{canEditTask && (
+  <button onClick={handleEdit}>Edit Task</button>
+)}
+```
+
+**Security Best Practices**:
+```typescript
+// ✅ Always validate permissions on both frontend AND backend
+const handleTimerAction = async (action) => {
+  // Frontend validation
+  if (!canControlTimer) {
+    console.warn('Unauthorized timer action attempt');
+    return;
+  }
+  
+  // Backend should also validate permissions
+  const result = await DatabaseOperations.updateTask(task, {
+    userId: currentUser.id,
+    action: action
+  });
+};
+
+// ✅ Log security-related actions
+const auditLog = {
+  userId: currentUser.id,
+  action: 'timer_start',
+  taskId: task.id,
+  timestamp: new Date().toISOString(),
+  authorized: canControlTimer
+};
+console.log('Security audit:', auditLog);
+
+// ✅ Use consistent permission checking across components
+const useTaskPermissions = (task: Task, currentUser: Teammate) => {
+  return {
+    canControlTimer: currentUser.id === task.assignedToId || currentUser.role === 'CEO',
+    canEdit: ['HR and Admin', 'CEO', 'Lead Web Developer', 'SMM and Design Lead', 'Sales and PR Lead', 'Lead SEO Expert'].includes(currentUser.role),
+    canDelete: currentUser.role === 'CEO',
+    canView: ['HR and Admin', 'CEO', 'Lead Web Developer', 'SMM and Design Lead', 'Sales and PR Lead', 'Lead SEO Expert'].includes(currentUser.role) || currentUser.id === task.assignedToId
+  };
+};
+```
+
+**Prevention**:
+- Always use principle of least privilege - grant minimum necessary permissions
+- Create reusable permission checking functions
+- Validate permissions on both frontend and backend
+- Log security-related actions for audit trails
+- Test with different user roles to ensure correct access control
+- Document permission requirements clearly in code comments
+
+**Common Permission Patterns**:
+```typescript
+// Task timer controls: Only assigned user or CEO
+const canControlTimer = currentUser.id === task.assignedToId || currentUser.role === 'CEO';
+
+// Task editing: Any manager
+const canEditTask = isManager;
+
+// Task deletion: CEO only
+const canDeleteTask = currentUser.role === 'CEO';
+
+// Task viewing: Managers or assigned user
+const canViewTask = isManager || currentUser.id === task.assignedToId;
+
+// Salary management: HR and CEO only
+const canManageSalaries = ['HR and Admin', 'CEO'].includes(currentUser.role);
+
+// Performance ratings: Task assigner or CEO
+const canRateTask = currentUser.id === task.assignedById || currentUser.role === 'CEO';
+```
+
+**Applies to**: All role-based functionality across tasks, projects, user management, and administrative features.
+
+---
+
 **Last Updated**: January 2025  
 **Applies to**: Task Management, Project Management, Client Management, Approval Management, and all future features
 

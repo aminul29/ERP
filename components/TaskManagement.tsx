@@ -376,7 +376,8 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                     </td>
                     <td className="p-4">
                       <div className="flex items-center justify-center space-x-2">
-                          {(task.assignedToId === currentUser.id || isManager) && task.status !== TaskStatus.Done && (
+                          {/* Task timer controls - only visible to assigned teammate or CEO */}
+                          {(task.assignedToId === currentUser.id || isCeo) && task.status !== TaskStatus.Done && (
                           <>
                               {task.status === TaskStatus.ToDo && (
                               <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded">Start</button>
@@ -457,7 +458,8 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
               </div>
 
               <div className="mt-4 pt-3 border-t border-gray-700 flex items-center justify-center space-x-2 flex-wrap gap-2">
-                {(task.assignedToId === currentUser.id || isManager) && task.status !== TaskStatus.Done && (
+                {/* Task timer controls - only visible to assigned teammate or CEO */}
+                {(task.assignedToId === currentUser.id || isCeo) && task.status !== TaskStatus.Done && (
                   <>
                       {task.status === TaskStatus.ToDo && (
                       <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded">Start</button>
