@@ -125,6 +125,15 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
   const [isDivisionDropdownOpen, setIsDivisionDropdownOpen] = useState(false);
   const divisionDropdownRef = useRef<HTMLDivElement>(null);
   
+  // View and Filter States
+  const [viewMode, setViewMode] = useState<'card' | 'list'>('card'); // Default to card view
+  const [filterStatus, setFilterStatus] = useState<TaskStatus | 'all'>('all');
+  const [filterPriority, setFilterPriority] = useState<TaskPriority | 'all'>('all');
+  const [filterAssignee, setFilterAssignee] = useState<string>('all');
+  const [sortBy, setSortBy] = useState<'deadline' | 'priority' | 'status' | 'title'>('deadline');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [searchTerm, setSearchTerm] = useState('');
+  
   const isManager = ['HR and Admin', 'CEO', 'Lead Web Developer', 'SMM and Design Lead', 'Sales and PR Lead', 'Lead SEO Expert'].includes(currentUser.role);
   const isCeo = currentUser.role === 'CEO';
   
@@ -142,11 +151,75 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
     return canDelete;
   };
 
-  const userTasks = useMemo(() => {
-    return tasks
-      .filter(task => isManager || task.assignedToId === currentUser.id)
-      .sort((a,b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime());
-  }, [tasks, currentUser, isManager]);
+  // Filtered and Sorted Tasks
+  const filteredAndSortedTasks = useMemo(() => {
+    let filtered = tasks.filter(task => isManager || task.assignedToId === currentUser.id);
+    
+    // Apply search filter
+    if (searchTerm.trim()) {
+      filtered = filtered.filter(task => 
+        task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        task.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        projects.find(p => p.id === task.projectId)?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        teammates.find(t => t.id === task.assignedToId)?.name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    // Apply status filter
+    if (filterStatus !== 'all') {
+      filtered = filtered.filter(task => task.status === filterStatus);
+    }
+    
+    // Apply priority filter
+    if (filterPriority !== 'all') {
+      filtered = filtered.filter(task => task.priority === filterPriority);
+    }
+    
+    // Apply assignee filter
+    if (filterAssignee !== 'all') {
+      filtered = filtered.filter(task => task.assignedToId === filterAssignee);
+    }
+    
+    // Apply sorting
+    filtered.sort((a, b) => {
+      let aValue, bValue;
+      
+      switch (sortBy) {
+        case 'title':
+          aValue = a.title.toLowerCase();
+          bValue = b.title.toLowerCase();
+          break;
+        case 'deadline':
+          aValue = new Date(a.deadline).getTime();
+          bValue = new Date(b.deadline).getTime();
+          break;
+        case 'priority':
+          const priorityOrder = { 'High': 3, 'Medium': 2, 'Low': 1 };
+          aValue = priorityOrder[a.priority] || 0;
+          bValue = priorityOrder[b.priority] || 0;
+          break;
+        case 'status':
+          const statusOrder = { 
+            'To Do': 1, 'In Progress': 2, 'Under Review': 3, 
+            'Revision Required': 4, 'Completed': 5 
+          };
+          aValue = statusOrder[a.status] || 0;
+          bValue = statusOrder[b.status] || 0;
+          break;
+        default:
+          aValue = new Date(a.deadline).getTime();
+          bValue = new Date(b.deadline).getTime();
+      }
+      
+      if (sortOrder === 'asc') {
+        return aValue > bValue ? 1 : aValue < bValue ? -1 : 0;
+      } else {
+        return aValue < bValue ? 1 : aValue > bValue ? -1 : 0;
+      }
+    });
+    
+    return filtered;
+  }, [tasks, currentUser, isManager, searchTerm, filterStatus, filterPriority, filterAssignee, sortBy, sortOrder, projects, teammates]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -323,127 +396,334 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
           <span className="hidden sm:inline">Assign Task</span>
         </button>
       </div>
+      
+      {/* Filters and Controls */}
+      <div className="mb-6 space-y-4">
+        {/* Search and View Toggle */}
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+          <div className="flex-1 max-w-md">
+            <input
+              type="text"
+              placeholder="Search tasks..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500"
+            />
+          </div>
+          
+          {/* View Toggle - Hidden on mobile since mobile already defaults to card view */}
+          <div className="hidden md:flex bg-gray-700 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('card')}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                viewMode === 'card'
+                  ? 'bg-primary-500 text-white'
+                  : 'text-gray-300 hover:text-white hover:bg-gray-600'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" />
+                </svg>
+                <span>Cards</span>
+              </div>
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-primary-500 text-white'
+                  : 'text-gray-300 hover:text-white hover:bg-gray-600'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                </svg>
+                <span>List</span>
+              </div>
+            </button>
+          </div>
+        </div>
+        
+        {/* Filters */}
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+          <div className="flex flex-wrap gap-3 flex-1">
+            {/* Status Filter */}
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as TaskStatus | 'all')}
+              className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
+            >
+              <option value="all">All Status</option>
+              {Object.values(TaskStatus).map(status => (
+                <option key={status} value={status}>{status}</option>
+              ))}
+            </select>
+            
+            {/* Priority Filter */}
+            <select
+              value={filterPriority}
+              onChange={(e) => setFilterPriority(e.target.value as TaskPriority | 'all')}
+              className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
+            >
+              <option value="all">All Priority</option>
+              {Object.values(TaskPriority).map(priority => (
+                <option key={priority} value={priority}>{priority}</option>
+              ))}
+            </select>
+            
+            {/* Assignee Filter (Only for managers) */}
+            {isManager && (
+              <select
+                value={filterAssignee}
+                onChange={(e) => setFilterAssignee(e.target.value)}
+                className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
+              >
+                <option value="all">All Assignees</option>
+                {teammates.map(teammate => (
+                  <option key={teammate.id} value={teammate.id}>{teammate.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+          
+          {/* Sort Controls */}
+          <div className="flex gap-2 items-center">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'deadline' | 'priority' | 'status' | 'title')}
+              className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
+            >
+              <option value="deadline">Sort by Deadline</option>
+              <option value="title">Sort by Title</option>
+              <option value="priority">Sort by Priority</option>
+              <option value="status">Sort by Status</option>
+            </select>
+            
+            <button
+              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+              className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm hover:bg-gray-600 focus:outline-none focus:border-primary-500 transition-colors"
+            >
+              {sortOrder === 'asc' ? '↑' : '↓'}
+            </button>
+          </div>
+        </div>
+        
+        {/* Results Count */}
+        <div className="text-sm text-gray-400">
+          Showing {filteredAndSortedTasks.length} of {tasks.filter(task => isManager || task.assignedToId === currentUser.id).length} tasks
+        </div>
+      </div>
 
-      {/* Desktop Table View */}
+      {/* Desktop Views */}
       <div className="hidden md:block">
-        <Card>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="border-b border-gray-700">
-                <tr>
-                  <th className="p-4">Title</th>
-                  {isManager && <th className="p-4">Assigned To</th>}
-                  <th className="p-4">Project</th>
-                  <th className="p-4">Deadline</th>
-                  <th className="p-4">Priority</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4">Rating{isCeo ? ' (A/C)' : ''}</th>
-                  <th className="p-4">Timer (Rem/Alloc)</th>
-                  <th className="p-4 w-56 text-center">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {userTasks.map(task => {
-                  const isPending = pendingUpdates.some(p => p.type === 'task' && p.itemId === task.id);
-                  const isComplete = task.status === TaskStatus.Completed;
-                  const canRateAsCeo = isCeo && isComplete;
-                  const canRateAsAssigner = currentUser.id === task.assignedById && isComplete;
-                  const assignerRating = task.ratings?.assigner || 0;
-                  const ceoRating = task.ratings?.ceo || 0;
+        {viewMode === 'list' ? (
+          /* List View */
+          <Card>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="border-b border-gray-700">
+                  <tr>
+                    <th className="p-4">Title</th>
+                    {isManager && <th className="p-4">Assigned To</th>}
+                    <th className="p-4">Project</th>
+                    <th className="p-4">Deadline</th>
+                    <th className="p-4">Priority</th>
+                    <th className="p-4">Status</th>
+                    <th className="p-4">Rating{isCeo ? ' (A/C)' : ''}</th>
+                    <th className="p-4">Timer (Rem/Alloc)</th>
+                    <th className="p-4 w-56 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAndSortedTasks.map(task => {
+                    const isPending = pendingUpdates.some(p => p.type === 'task' && p.itemId === task.id);
+                    const isComplete = task.status === TaskStatus.Completed;
+                    const canRateAsCeo = isCeo && isComplete;
+                    const canRateAsAssigner = currentUser.id === task.assignedById && isComplete;
+                    const assignerRating = task.ratings?.assigner || 0;
+                    const ceoRating = task.ratings?.ceo || 0;
 
-                  return (
-                  <tr key={task.id} className="border-b border-gray-800 hover:bg-gray-700/50">
-                    <td className="p-4 font-medium">
-                      <button onClick={() => onNavClick(`taskDetail/${task.id}`)} className="text-left hover:text-primary-400 transition-colors" title={task.description}>
-                          {task.title}
-                      </button>
-                    </td>
-                    {isManager && <td className="p-4 text-gray-300">{teammates.find(e => e.id === task.assignedToId)?.name}</td>}
-                    <td className="p-4 text-gray-300">{projects.find(p => p.id === task.projectId)?.name}</td>
-                    <td className="p-4 text-gray-300">{formatDeadlineForDisplay(task.deadline)}</td>
-                    <td className="p-4"><Badge color={priorityColors[task.priority]}>{task.priority}</Badge></td>
-                    <td className="p-4">
-                      <div className="flex flex-col space-y-1 items-start">
-                          <Badge color={statusColors[task.status]}>{task.status}</Badge>
-                          {isPending && <Badge color="yellow">Pending</Badge>}
-                      </div>
-                    </td>
-                    <td className="p-4">
-                      {isComplete ? (
-                          <div className="flex flex-col space-y-1">
-                              <div title={!canRateAsAssigner ? "Only the task assigner can rate" : "Assigner Rating"}>
-                                  <StarRating
-                                      rating={assignerRating}
-                                      onRatingChange={(newRating) => onRateTask(task.id, newRating, 'assigner')}
-                                      disabled={!canRateAsAssigner}
-                                  />
-                              </div>
-                              {isCeo && (
-                                <div title={!canRateAsCeo ? "Only the CEO can rate" : "CEO Rating"}>
+                    return (
+                    <tr key={task.id} className="border-b border-gray-800 hover:bg-gray-700/50">
+                      <td className="p-4 font-medium">
+                        <button onClick={() => onNavClick(`taskDetail/${task.id}`)} className="text-left hover:text-primary-400 transition-colors" title={task.description}>
+                            {task.title}
+                        </button>
+                      </td>
+                      {isManager && <td className="p-4 text-gray-300">{teammates.find(e => e.id === task.assignedToId)?.name}</td>}
+                      <td className="p-4 text-gray-300">{projects.find(p => p.id === task.projectId)?.name}</td>
+                      <td className="p-4 text-gray-300">{formatDeadlineForDisplay(task.deadline)}</td>
+                      <td className="p-4"><Badge color={priorityColors[task.priority]}>{task.priority}</Badge></td>
+                      <td className="p-4">
+                        <div className="flex flex-col space-y-1 items-start">
+                            <Badge color={statusColors[task.status]}>{task.status}</Badge>
+                            {isPending && <Badge color="yellow">Pending</Badge>}
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        {isComplete ? (
+                            <div className="flex flex-col space-y-1">
+                                <div title={!canRateAsAssigner ? "Only the task assigner can rate" : "Assigner Rating"}>
                                     <StarRating
-                                        rating={ceoRating}
-                                        onRatingChange={(newRating) => onRateTask(task.id, newRating, 'ceo')}
-                                        disabled={!canRateAsCeo}
+                                        rating={assignerRating}
+                                        onRatingChange={(newRating) => onRateTask(task.id, newRating, 'assigner')}
+                                        disabled={!canRateAsAssigner}
                                     />
                                 </div>
-                              )}
-                          </div>
-                      ) : (
-                          <span className="text-gray-500">-</span>
+                                {isCeo && (
+                                  <div title={!canRateAsCeo ? "Only the CEO can rate" : "CEO Rating"}>
+                                      <StarRating
+                                          rating={ceoRating}
+                                          onRatingChange={(newRating) => onRateTask(task.id, newRating, 'ceo')}
+                                          disabled={!canRateAsCeo}
+                                      />
+                                  </div>
+                                )}
+                            </div>
+                        ) : (
+                            <span className="text-gray-500">-</span>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        <div>
+                            <TimerDisplay task={task} />
+                            <span className="text-xs text-gray-400">of {formatTime(task.allocatedTimeInSeconds)}</span>
+                        </div>
+                      </td>
+                      <td className="p-4">
+                        <div className="flex items-center justify-center space-x-2">
+                            {/* Task timer controls - only visible to assigned teammate or CEO for active tasks */}
+                            {(task.assignedToId === currentUser.id || isCeo) && [TaskStatus.ToDo, TaskStatus.InProgress].includes(task.status) && (
+                            <>
+                                {task.status === TaskStatus.ToDo && (
+                                <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded">Start</button>
+                                )}
+                                {task.status === TaskStatus.InProgress && task.timerStartTime && (
+                                <button onClick={() => handleTimerAction(task, 'pause')} className="bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold py-1 px-3 rounded">Pause</button>
+                                )}
+                                {task.status === TaskStatus.InProgress && !task.timerStartTime && (
+                                <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded">Resume</button>
+                                )}
+                                <button onClick={() => handleMarkAsDone(task)} className="bg-primary-500 hover:bg-primary-600 text-white text-xs font-bold py-1 px-3 rounded">Done</button>
+                            </>
+                            )}
+                            {task.status === TaskStatus.Done && <span className="text-gray-400 text-sm flex items-center justify-center">Completed</span>}
+                            {/* Edit and Delete buttons - only for task assigner and CEO */}
+                            {(canEditTask(task) || canDeleteTask(task)) && (
+                                <>
+                                    {canEditTask(task) && (
+                                        <button onClick={() => handleOpenModal(task)} className="text-yellow-400 hover:text-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending} title={isPending ? "Changes pending approval" : "Edit Task"}>
+                                            {ICONS.edit}
+                                        </button>
+                                    )}
+                                    {canDeleteTask(task) && (
+                                        <button onClick={() => handleOpenDeleteModal(task)} className="text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending || !canDeleteTask(task)} title={!canDeleteTask(task) ? "Only CEO can delete tasks that have started" : isPending ? "Changes pending approval" : "Delete Task"}>
+                                            {ICONS.trash}
+                                        </button>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                      </td>
+                    </tr>
+                  )})}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        ) : (
+          /* Card View for Desktop */
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filteredAndSortedTasks.map(task => {
+              const isPending = pendingUpdates.some(p => p.type === 'task' && p.itemId === task.id);
+              const isComplete = task.status === TaskStatus.Completed;
+              const canRateAsCeo = isCeo && isComplete;
+              const canRateAsAssigner = currentUser.id === task.assignedById && isComplete;
+              const assignerRating = task.ratings?.assigner || 0;
+              const ceoRating = task.ratings?.ceo || 0;
+              
+              return (
+                <Card key={task.id} className="p-4 hover:bg-gray-800/50 transition-colors">
+                  <div className="flex justify-between items-start mb-3">
+                      <button onClick={() => onNavClick(`taskDetail/${task.id}`)} className="text-left font-semibold text-lg text-white hover:text-primary-400 pr-2 line-clamp-2">
+                          {task.title}
+                      </button>
+                      <Badge color={priorityColors[task.priority]}>{task.priority}</Badge>
+                  </div>
+
+                  <div className="space-y-2 text-sm text-gray-300 mb-4">
+                      {isManager && (
+                        <div><span className="text-gray-400">To: </span>{teammates.find(e => e.id === task.assignedToId)?.name}</div>
                       )}
-                    </td>
-                    <td className="p-4">
-                      <div>
-                          <TimerDisplay task={task} />
-                          <span className="text-xs text-gray-400">of {formatTime(task.allocatedTimeInSeconds)}</span>
+                      <div><span className="text-gray-400">Project: </span>{projects.find(p => p.id === task.projectId)?.name || 'N/A'}</div>
+                      <div><span className="text-gray-400">Deadline: </span>{formatDeadlineForDisplay(task.deadline)}</div>
+                      <div className="flex items-center space-x-2"><span className="text-gray-400">Status: </span> <Badge color={statusColors[task.status]}>{task.status}</Badge> {isPending && <Badge color="yellow">Pending</Badge>}</div>
+                  </div>
+
+                  <div className="flex justify-between items-center text-sm mb-4 pt-3 border-t border-gray-700">
+                    <div>
+                      <div className="text-gray-400 text-xs">Time Remaining</div>
+                      <TimerDisplay task={task} />
+                      <div className="text-xs text-gray-500">of {formatTime(task.allocatedTimeInSeconds)}</div>
+                    </div>
+                    {isComplete ? (
+                      <div className="text-right">
+                          <div className="text-gray-400 text-xs mb-1">Rating</div>
+                          <div className="space-y-1">
+                            <StarRating rating={assignerRating} disabled={!canRateAsAssigner} onRatingChange={(newRating) => onRateTask(task.id, newRating, 'assigner')}/>
+                            {isCeo && <StarRating rating={ceoRating} disabled={!canRateAsCeo} onRatingChange={(newRating) => onRateTask(task.id, newRating, 'ceo')}/>}
+                          </div>
                       </div>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center justify-center space-x-2">
-                          {/* Task timer controls - only visible to assigned teammate or CEO for active tasks */}
-                          {(task.assignedToId === currentUser.id || isCeo) && [TaskStatus.ToDo, TaskStatus.InProgress].includes(task.status) && (
+                    ) : 
+                      <div className="text-gray-400 text-sm">Not Rated</div>
+                    }
+                  </div>
+
+                  <div className="pt-3 border-t border-gray-700 flex items-center justify-center space-x-2 flex-wrap gap-2">
+                    {/* Task timer controls - only visible to assigned teammate or CEO for active tasks */}
+                    {(task.assignedToId === currentUser.id || isCeo) && [TaskStatus.ToDo, TaskStatus.InProgress].includes(task.status) && (
+                      <>
+                          {task.status === TaskStatus.ToDo && (
+                          <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded">Start</button>
+                          )}
+                          {task.status === TaskStatus.InProgress && task.timerStartTime && (
+                          <button onClick={() => handleTimerAction(task, 'pause')} className="bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold py-1 px-3 rounded">Pause</button>
+                          )}
+                          {task.status === TaskStatus.InProgress && !task.timerStartTime && (
+                          <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded">Resume</button>
+                          )}
+                          <button onClick={() => handleMarkAsDone(task)} className="bg-primary-500 hover:bg-primary-600 text-white text-xs font-bold py-1 px-3 rounded">Done</button>
+                      </>
+                      )}
+                      {task.status === TaskStatus.Done && <span className="text-gray-400 text-sm flex items-center justify-center">Completed</span>}
+                      {/* Edit and Delete buttons - only for task assigner and CEO */}
+                      {(canEditTask(task) || canDeleteTask(task)) && (
                           <>
-                              {task.status === TaskStatus.ToDo && (
-                              <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded">Start</button>
+                              {canEditTask(task) && (
+                                  <button onClick={() => handleOpenModal(task)} className="text-yellow-400 hover:text-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending} title={isPending ? "Changes pending approval" : "Edit Task"}>
+                                      {ICONS.edit}
+                                  </button>
                               )}
-                              {task.status === TaskStatus.InProgress && task.timerStartTime && (
-                              <button onClick={() => handleTimerAction(task, 'pause')} className="bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold py-1 px-3 rounded">Pause</button>
+                              {canDeleteTask(task) && (
+                                  <button onClick={() => handleOpenDeleteModal(task)} className="text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending || !canDeleteTask(task)} title={!canDeleteTask(task) ? "Only CEO can delete tasks that have started" : isPending ? "Changes pending approval" : "Delete Task"}>
+                                      {ICONS.trash}
+                                  </button>
                               )}
-                              {task.status === TaskStatus.InProgress && !task.timerStartTime && (
-                              <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded">Resume</button>
-                              )}
-                              <button onClick={() => handleMarkAsDone(task)} className="bg-primary-500 hover:bg-primary-600 text-white text-xs font-bold py-1 px-3 rounded">Done</button>
                           </>
-                          )}
-                          {task.status === TaskStatus.Done && <span className="text-gray-400 text-sm flex items-center justify-center">Completed</span>}
-                          {/* Edit and Delete buttons - only for task assigner and CEO */}
-                          {(canEditTask(task) || canDeleteTask(task)) && (
-                              <>
-                                  {canEditTask(task) && (
-                                      <button onClick={() => handleOpenModal(task)} className="text-yellow-400 hover:text-yellow-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending} title={isPending ? "Changes pending approval" : "Edit Task"}>
-                                          {ICONS.edit}
-                                      </button>
-                                  )}
-                                  {canDeleteTask(task) && (
-                                      <button onClick={() => handleOpenDeleteModal(task)} className="text-red-400 hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed" disabled={isPending || !canDeleteTask(task)} title={!canDeleteTask(task) ? "Only CEO can delete tasks that have started" : isPending ? "Changes pending approval" : "Delete Task"}>
-                                          {ICONS.trash}
-                                      </button>
-                                  )}
-                              </>
-                          )}
-                      </div>
-                    </td>
-                  </tr>
-                )})}
-              </tbody>
-            </table>
+                      )}
+                  </div>
+                </Card>
+              )
+            })}
           </div>
-        </Card>
+        )}
       </div>
       
-      {/* Mobile Card View */}
+      {/* Mobile Card View - Always card view */}
       <div className="md:hidden space-y-4">
-        {userTasks.map(task => {
+        {filteredAndSortedTasks.map(task => {
           const isPending = pendingUpdates.some(p => p.type === 'task' && p.itemId === task.id);
           const isComplete = task.status === TaskStatus.Completed;
           const canRateAsCeo = isCeo && isComplete;

@@ -999,6 +999,148 @@ const handleSubmit = () => {
 
 ---
 
+### ❌ Error: Missing props in parent component causing undefined functions
+
+**Problem**: Child components receive undefined for callback functions, causing "is not a function" errors when users interact with UI.
+
+**Symptoms**:
+```
+EditableComment receives undefined for onUpdate and onDelete
+Save button in comment editing appears to not work
+Runtime errors when clicking action buttons
+Component props show undefined in debugging
+```
+
+**Root Cause**: Parent component doesn't pass required callback props to child components, even when the handler functions exist.
+
+**Solution**:
+```typescript
+// ❌ Incorrect - Missing onUpdateComment and onDeleteComment props
+return <TaskDetail
+    task={task}
+    project={projects.find(p => p.id === task.projectId)}
+    // ... other props
+    comments={comments.filter(c => c.parentId === id)}
+    onAddComment={handleAddComment}
+    // Missing: onUpdateComment={handleUpdateComment}
+    // Missing: onDeleteComment={handleDeleteComment}
+    onUpdateTask={handleUpdateTask}
+    onNavClick={handleNavClick}
+/>;
+
+// ✅ Correct - Include all required callback props
+return <TaskDetail
+    task={task}
+    project={projects.find(p => p.id === task.projectId)}
+    // ... other props
+    comments={comments.filter(c => c.parentId === id)}
+    onAddComment={handleAddComment}
+    onUpdateComment={handleUpdateComment}  // ← Added missing prop
+    onDeleteComment={handleDeleteComment}  // ← Added missing prop
+    onUpdateTask={handleUpdateTask}
+    onNavClick={handleNavClick}
+/>;
+
+// ✅ Verify handler functions exist in parent
+const handleUpdateComment = useCallback(async (commentId: string, newText: string) => {
+  // Implementation with database operations
+  const result = await DatabaseOperations.updateComment({
+    ...commentToUpdate,
+    text: newText.trim()
+  });
+  if (result) {
+    setComments(prev => prev.map(c => c.id === commentId ? result : c));
+  }
+}, [currentUser, comments]);
+
+const handleDeleteComment = useCallback(async (commentId: string) => {
+  // Implementation with database operations and permission checks
+  const success = await DatabaseOperations.deleteComment(commentId);
+  if (success) {
+    setComments(prev => prev.filter(c => c.id !== commentId));
+  }
+}, [currentUser, comments]);
+```
+
+**Prevention**:
+```typescript
+// ✅ Create consistent prop interfaces
+interface TaskDetailProps {
+  task: Task;
+  comments: Comment[];
+  onAddComment: (parentId: string, text: string) => void;
+  onUpdateComment: (commentId: string, newText: string) => void;  // ← Ensure included
+  onDeleteComment: (commentId: string) => void;                   // ← Ensure included
+  // ... other props
+}
+
+// ✅ Use TypeScript to catch missing props at compile time
+const TaskDetail: React.FC<TaskDetailProps> = ({
+  task,
+  comments,
+  onAddComment,
+  onUpdateComment,  // TypeScript will error if not provided
+  onDeleteComment,  // TypeScript will error if not provided
+}) => {
+  // Component implementation
+};
+
+// ✅ Add prop validation during development
+const EditableComment = ({ comment, onUpdate, onDelete }) => {
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      if (typeof onUpdate !== 'function') {
+        console.error('EditableComment: onUpdate prop is not a function:', onUpdate);
+      }
+      if (typeof onDelete !== 'function') {
+        console.error('EditableComment: onDelete prop is not a function:', onDelete);
+      }
+    }
+  }, [onUpdate, onDelete]);
+  
+  // Component implementation
+};
+```
+
+**Debugging Steps**:
+1. Check parent component for handler function definitions
+2. Verify all required props are passed in component rendering
+3. Use React DevTools to inspect actual prop values
+4. Add console.log to verify functions exist before passing
+5. Ensure useCallback dependencies are correct
+
+**Common Missing Prop Patterns**:
+```typescript
+// Comments: onUpdate, onDelete often forgotten
+<CommentSection 
+  onAdd={handleAddComment}
+  onUpdate={handleUpdateComment}  // ← Often missing
+  onDelete={handleDeleteComment}  // ← Often missing
+/>
+
+// Tasks: onDelete, onRate sometimes forgotten
+<TaskManagement 
+  onAdd={handleAddTask}
+  onEdit={handleEditTask}
+  onUpdate={handleUpdateTask}
+  onDelete={handleDeleteTask}  // ← Sometimes missing
+  onRate={handleRateTask}      // ← Sometimes missing
+/>
+
+// Projects: rating handlers often forgotten
+<ProjectDetail
+  onAddTask={handleAddTask}
+  onUpdateTask={handleUpdateTask}
+  onAddComment={handleAddComment}
+  onUpdateComment={handleUpdateComment}  // ← Often missing
+  onDeleteComment={handleDeleteComment}  // ← Often missing
+/>
+```
+
+**Applies to**: All parent-child component relationships with callback props across comments, tasks, projects, and other interactive features.
+
+---
+
 ### ❌ Error: Unauthorized users can access restricted functionality
 
 **Problem**: UI buttons and controls are visible to users who shouldn't have access to them, leading to security concerns or unintended actions.
