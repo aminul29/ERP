@@ -503,8 +503,8 @@ export class DatabaseOperations {
         .insert([{
           parent_id: comment.parentId,
           author_id: comment.authorId,
-          text: comment.text,
-          timestamp: new Date().toISOString()
+          text: comment.text
+          // Let database handle created_at timestamp automatically
         }])
         .select()
         .single();
@@ -514,6 +514,53 @@ export class DatabaseOperations {
     } catch (error) {
       console.error('Error creating comment:', error);
       return null;
+    }
+  }
+
+  static async updateComment(comment: Comment): Promise<Comment | null> {
+    try {
+      console.log('🔄 Updating comment in database:', comment.id);
+      const { data, error } = await supabase
+        .from('comments')
+        .update({
+          text: comment.text
+          // Don't update parent_id, author_id, or timestamps
+        })
+        .eq('id', comment.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Database error updating comment:', error);
+        throw error;
+      }
+      
+      console.log('✅ Comment update successful:', data);
+      return mapComment(data);
+    } catch (error) {
+      console.error('Error updating comment:', error);
+      return null;
+    }
+  }
+
+  static async deleteComment(commentId: string): Promise<boolean> {
+    try {
+      console.log('🗑️ Deleting comment from database:', commentId);
+      const { error } = await supabase
+        .from('comments')
+        .delete()
+        .eq('id', commentId);
+
+      if (error) {
+        console.error('❌ Database error deleting comment:', error);
+        throw error;
+      }
+      
+      console.log('✅ Comment deleted successfully');
+      return true;
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+      return false;
     }
   }
 

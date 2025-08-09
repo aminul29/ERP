@@ -113,6 +113,7 @@ export const loadFromDatabase = {
         allocatedTimeInSeconds: row.allocated_time_in_seconds,
         timeSpentSeconds: row.time_spent_seconds,
         timerStartTime: row.timer_start_time,
+        revisionNote: row.revision_note,
         ratings: row.ratings || {}
       }));
     } catch (error) {

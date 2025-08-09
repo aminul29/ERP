@@ -231,6 +231,190 @@ const stripHtmlTags = (html: string): string => {
     return tempDiv.textContent || tempDiv.innerText || '';
 };
 
+// EditableComment component with edit/delete functionality
+interface EditableCommentProps {
+    comment: Comment;
+    author?: Teammate;
+    currentUser: Teammate;
+    canEdit: boolean;
+    canDelete: boolean;
+    onUpdate: (commentId: string, newText: string) => void;
+    onDelete: (commentId: string) => void;
+    timeAgo: string;
+}
+
+const EditableComment: React.FC<EditableCommentProps> = ({
+    comment,
+    author,
+    currentUser,
+    canEdit,
+    canDelete,
+    onUpdate,
+    onDelete,
+    timeAgo
+}) => {
+    // Debug props
+    console.log('🔍 EditableComment props:', {
+        commentId: comment.id,
+        canEdit,
+        canDelete,
+        onUpdateType: typeof onUpdate,
+        onDeleteType: typeof onDelete,
+        onUpdateExists: !!onUpdate,
+        onDeleteExists: !!onDelete
+    });
+    const [isEditing, setIsEditing] = useState(false);
+    const [editText, setEditText] = useState(comment.text);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+    // Sync editText when comment.text changes
+    useEffect(() => {
+        setEditText(comment.text);
+    }, [comment.text]);
+
+    const handleStartEdit = () => {
+        setEditText(comment.text);
+        setIsEditing(true);
+    };
+
+    const handleCancelEdit = () => {
+        setEditText(comment.text);
+        setIsEditing(false);
+    };
+
+    const handleSaveEdit = () => {
+        console.log('🔄 handleSaveEdit called', { editText, commentId: comment.id });
+        const trimmedText = editText.trim();
+        console.log('✂️ trimmed text:', trimmedText);
+        
+        if (trimmedText) {
+            console.log('✅ Calling onUpdate with:', { commentId: comment.id, trimmedText });
+            try {
+                onUpdate(comment.id, trimmedText);
+                console.log('✅ onUpdate called successfully');
+            } catch (error) {
+                console.error('❌ Error calling onUpdate:', error);
+            }
+        } else {
+            console.warn('⚠️ No text to save (empty after trimming)');
+        }
+        setIsEditing(false);
+        console.log('🔄 Edit mode disabled');
+    };
+
+    const handleDelete = () => {
+        onDelete(comment.id);
+        setShowDeleteConfirm(false);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSaveEdit();
+        } else if (e.key === 'Escape') {
+            handleCancelEdit();
+        }
+    };
+
+    return (
+        <div className="flex items-start space-x-3">
+            <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                {author?.name.charAt(0) || '?'}
+            </div>
+            <div className="flex-1">
+                <div className="flex items-center justify-between">
+                    <p className="text-sm">
+                        <span className="font-semibold text-white">{author?.name || 'Unknown'}</span>
+                        <span className="text-gray-400 ml-2">{timeAgo}</span>
+                    </p>
+                    <div className="flex items-center space-x-1">
+                        {canEdit && (
+                            <button
+                                onClick={handleStartEdit}
+                                className="text-xs text-gray-400 hover:text-primary-400 p-1 rounded transition-colors"
+                                title="Edit comment"
+                            >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                            </button>
+                        )}
+                        {canDelete && (
+                            <button
+                                onClick={() => setShowDeleteConfirm(true)}
+                                className="text-xs text-gray-400 hover:text-red-400 p-1 rounded transition-colors"
+                                title="Delete comment"
+                            >
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                        )}
+                    </div>
+                </div>
+                
+                {isEditing ? (
+                    <div className="mt-1">
+                        <textarea
+                            value={editText}
+                            onChange={(e) => setEditText(e.target.value)}
+                            onKeyDown={handleKeyDown}
+                            className="w-full p-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-primary-500 focus:outline-none resize-none"
+                            rows={3}
+                            autoFocus
+                        />
+                        <div className="flex items-center justify-between mt-2">
+                            <p className="text-xs text-gray-400">Press Enter to save, Escape to cancel</p>
+                            <div className="flex space-x-2">
+                                <button
+                                    onClick={handleCancelEdit}
+                                    className="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-500 text-white rounded transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSaveEdit}
+                                    className="px-2 py-1 text-xs bg-primary-500 hover:bg-primary-600 text-white rounded transition-colors"
+                                >
+                                    Save
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <p className="p-2 bg-gray-700/50 rounded-md mt-1 text-white break-words">
+                        {comment.text}
+                    </p>
+                )}
+                
+                {/* Delete confirmation modal */}
+                {showDeleteConfirm && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-gray-800 p-6 rounded-lg max-w-md w-full mx-4">
+                            <h3 className="text-lg font-semibold text-white mb-4">Delete Comment</h3>
+                            <p className="text-gray-300 mb-6">Are you sure you want to delete this comment? This action cannot be undone.</p>
+                            <div className="flex justify-end space-x-3">
+                                <button
+                                    onClick={() => setShowDeleteConfirm(false)}
+                                    className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleDelete}
+                                    className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded transition-colors"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 interface TaskDetailProps {
     task: Task;
     project?: Project;
@@ -241,6 +425,8 @@ interface TaskDetailProps {
     comments: Comment[];
     updateHistory: PendingUpdate[];
     onAddComment: (parentId: string, text: string) => void;
+    onUpdateComment: (commentId: string, newText: string) => void;
+    onDeleteComment: (commentId: string) => void;
     onUpdateTask: (task: Task) => void;
     onRateTask: (taskId: string, rating: number, rater: 'assigner' | 'ceo') => void;
     onApproveTask?: (taskId: string) => void;
@@ -248,7 +434,7 @@ interface TaskDetailProps {
     onNavClick: (view: string) => void;
 }
 
-export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, allTeammates, currentUser, comments, updateHistory, onAddComment, onUpdateTask, onRateTask, onApproveTask, onRequestRevision, onNavClick }) => {
+export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, allTeammates, currentUser, comments, updateHistory, onAddComment, onUpdateComment, onDeleteComment, onUpdateTask, onRateTask, onApproveTask, onRequestRevision, onNavClick }) => {
     const [newComment, setNewComment] = useState('');
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [isRevisionModalOpen, setIsRevisionModalOpen] = useState(false);
@@ -525,14 +711,23 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, a
                             {combinedHistory.map(item => {
                                  if (item.historyItemType === 'comment') {
                                     const author = allTeammates.find(t => t.id === item.authorId);
+                                    const canEditComment = item.authorId === currentUser.id;
+                                    const canDeleteComment = item.authorId === currentUser.id || 
+                                                          currentUser.role === 'CEO' || 
+                                                          ['HR and Admin', 'Lead Web Developer', 'SMM and Design Lead', 'Sales and PR Lead', 'Lead SEO Expert'].includes(currentUser.role);
+                                    
                                     return (
-                                       <div key={item.id} className="flex items-start space-x-3">
-                                           <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center font-bold text-sm flex-shrink-0">{author?.name.charAt(0) || '?'}</div>
-                                           <div className="flex-1">
-                                               <p className="text-sm"><span className="font-semibold text-white">{author?.name || 'Unknown'}</span><span className="text-gray-400 ml-2">{timeAgo(item.date)}</span></p>
-                                               <p className="p-2 bg-gray-700/50 rounded-md mt-1 text-white">{item.text}</p>
-                                           </div>
-                                       </div>
+                                       <EditableComment 
+                                           key={item.id}
+                                           comment={item as Comment}
+                                           author={author}
+                                           currentUser={currentUser}
+                                           canEdit={canEditComment}
+                                           canDelete={canDeleteComment}
+                                           onUpdate={onUpdateComment}
+                                           onDelete={onDeleteComment}
+                                           timeAgo={timeAgo(item.date)}
+                                       />
                                     )
                                  }
                                  if (item.historyItemType === 'update') {

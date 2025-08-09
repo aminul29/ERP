@@ -68,6 +68,7 @@ CREATE TABLE tasks (
     allocated_time_in_seconds INTEGER DEFAULT 0,
     time_spent_seconds INTEGER DEFAULT 0,
     timer_start_time TIMESTAMP WITH TIME ZONE,
+    revision_note TEXT,
     ratings JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

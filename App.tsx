@@ -290,6 +290,33 @@ function App() {
     loadTasks();
   }, []);
 
+  // Load Comments from database on app start
+  useEffect(() => {
+    const loadComments = async () => {
+      try {
+        const commentsData = await loadFromDatabase.comments();
+        console.log('💬 Loaded comments from database:', commentsData);
+        if (commentsData && commentsData.length > 0) {
+          setComments(commentsData);
+        } else {
+          // If no comments in database, fallback to localStorage then initial data
+          console.log('No comments found in database, using fallback data...');
+          const localComments = loadState('erp_comments', initialComments);
+          console.log('💬 Using fallback comments:', localComments);
+          setComments(localComments);
+        }
+      } catch (error) {
+        console.error('Failed to load comments from database:', error);
+        // Fallback to localStorage then initial data
+        const localComments = loadState('erp_comments', initialComments);
+        console.log('💬 Error fallback comments:', localComments);
+        setComments(localComments);
+      }
+    };
+    
+    loadComments();
+  }, []);
+
   // Real-time notifications subscription
   useEffect(() => {
     if (!notificationsLoaded) return;
@@ -466,6 +493,83 @@ function App() {
     };
   }, [tasksLoaded]);
 
+  // Real-time comments subscription
+  useEffect(() => {
+    console.log('🔄 Setting up real-time comments subscription...');
+    
+    // Subscribe to comments table changes
+    const subscription = supabase
+      .channel('comments-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'comments'
+        },
+        async (payload) => {
+          console.log('💬 Real-time comment change:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            // New comment created
+            const newCommentData = payload.new;
+            console.log('🆕 New comment inserted:', newCommentData);
+            
+            // Map the database row to our comment format
+            const newComment: Comment = {
+              id: newCommentData.id,
+              parentId: newCommentData.parent_id,
+              authorId: newCommentData.author_id,
+              text: newCommentData.text,
+              timestamp: newCommentData.created_at
+            };
+            
+            // Add to local state if not already present
+            setComments(prev => {
+              const exists = prev.find(c => c.id === newComment.id);
+              if (!exists) {
+                console.log('➕ Adding new comment to state:', newComment);
+                return [...prev, newComment];
+              }
+              console.log('🔄 Comment already exists in state:', newComment.id);
+              return prev;
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            // Comment updated
+            const updatedCommentData = payload.new;
+            console.log('🔄 Comment updated:', updatedCommentData);
+            
+            const updatedComment: Comment = {
+              id: updatedCommentData.id,
+              parentId: updatedCommentData.parent_id,
+              authorId: updatedCommentData.author_id,
+              text: updatedCommentData.text,
+              timestamp: updatedCommentData.created_at
+            };
+            
+            setComments(prev => prev.map(c => 
+              c.id === updatedComment.id ? updatedComment : c
+            ));
+          } else if (payload.eventType === 'DELETE') {
+            // Comment deleted
+            const deletedCommentData = payload.old;
+            console.log('🗑️ Comment deleted:', deletedCommentData);
+            
+            setComments(prev => prev.filter(c => c.id !== deletedCommentData.id));
+          }
+        }
+      )
+      .subscribe();
+      
+    console.log('✓ Real-time comments subscription active');
+    
+    // Cleanup subscription on unmount
+    return () => {
+      console.log('🗑️ Cleaning up comments subscription');
+      subscription.unsubscribe();
+    };
+  }, []); // No dependency on comments loaded state since comments are always needed
+
   // Effects to save state changes to localStorage (gradually migrating to database)
   // Teammates now managed through database operations, no localStorage sync needed
   // Clients now managed through database operations, no localStorage sync needed
@@ -490,7 +594,7 @@ function App() {
   }, [erpSettings, erpSettingsLoaded]);
   useEffect(() => { localStorage.setItem('erp_currentUserId', JSON.stringify(currentUserId)); }, [currentUserId]);
   useEffect(() => { localStorage.setItem('erp_pendingUpdates', JSON.stringify(pendingUpdates)); }, [pendingUpdates]);
-  useEffect(() => { localStorage.setItem('erp_comments', JSON.stringify(comments)); }, [comments]);
+  // Comments now managed through database operations, no localStorage sync needed
 
   useEffect(() => {
     if (!currentUser) {
@@ -1481,17 +1585,112 @@ function App() {
      }
   }, [attendance]);
   
-  const handleAddComment = useCallback((parentId: string, text: string) => {
+  const handleAddComment = useCallback(async (parentId: string, text: string) => {
     if (!currentUser || !text.trim()) return;
-    const newComment: Comment = {
+    
+    try {
+      // Create comment in database
+      const createdComment = await DatabaseOperations.createComment({
+        parentId,
+        authorId: currentUser.id,
+        text: text.trim()
+      });
+      
+      if (createdComment) {
+        console.log('💬 Comment created successfully:', createdComment);
+        // Update local state only if database create succeeds
+        setComments(prev => [...prev, createdComment]);
+      } else {
+        console.error('❌ Failed to create comment - no data returned');
+      }
+    } catch (error) {
+      console.error('❌ Error creating comment:', error);
+      // Fallback: create comment locally if database fails
+      const fallbackComment: Comment = {
         id: `comment_${new Date().getTime()}`,
         parentId,
         authorId: currentUser.id,
         text: text.trim(),
         timestamp: new Date().toISOString(),
-    };
-    setComments(prev => [...prev, newComment]);
+      };
+      setComments(prev => [...prev, fallbackComment]);
+    }
   }, [currentUser]);
+
+  const handleUpdateComment = useCallback(async (commentId: string, newText: string) => {
+    if (!currentUser || !newText.trim()) return;
+    
+    const commentToUpdate = comments.find(c => c.id === commentId);
+    if (!commentToUpdate) {
+      console.error('❌ Comment not found:', commentId);
+      return;
+    }
+    
+    // Check if current user is the author
+    if (commentToUpdate.authorId !== currentUser.id) {
+      console.error('❌ User can only edit their own comments');
+      return;
+    }
+    
+    try {
+      // Update comment in database
+      const updatedComment = await DatabaseOperations.updateComment({
+        ...commentToUpdate,
+        text: newText.trim()
+      });
+      
+      if (updatedComment) {
+        console.log('✅ Comment updated successfully:', updatedComment);
+        // Update local state only if database update succeeds
+        setComments(prev => prev.map(c => c.id === commentId ? updatedComment : c));
+      } else {
+        console.error('❌ Failed to update comment - no data returned');
+      }
+    } catch (error) {
+      console.error('❌ Error updating comment:', error);
+      // Fallback: update comment locally if database fails
+      setComments(prev => prev.map(c => 
+        c.id === commentId ? { ...c, text: newText.trim() } : c
+      ));
+    }
+  }, [currentUser, comments]);
+
+  const handleDeleteComment = useCallback(async (commentId: string) => {
+    if (!currentUser) return;
+    
+    const commentToDelete = comments.find(c => c.id === commentId);
+    if (!commentToDelete) {
+      console.error('❌ Comment not found:', commentId);
+      return;
+    }
+    
+    // Check if current user is the author or has admin privileges
+    const canDelete = commentToDelete.authorId === currentUser.id || 
+                     currentUser.role === 'CEO' || 
+                     ['HR and Admin', 'Lead Web Developer', 'SMM and Design Lead', 'Sales and PR Lead', 'Lead SEO Expert'].includes(currentUser.role);
+    
+    if (!canDelete) {
+      console.error('❌ User does not have permission to delete this comment');
+      return;
+    }
+    
+    try {
+      // Delete comment from database
+      const success = await DatabaseOperations.deleteComment(commentId);
+      
+      if (success) {
+        console.log('✅ Comment deleted successfully');
+        // Remove from local state only if database delete succeeds
+        setComments(prev => prev.filter(c => c.id !== commentId));
+      } else {
+        console.error('❌ Failed to delete comment - operation returned false');
+      }
+    } catch (error) {
+      console.error('❌ Error deleting comment:', error);
+      // Fallback: remove comment locally if database fails
+      setComments(prev => prev.filter(c => c.id !== commentId));
+    }
+  }, [currentUser, comments]);
 
   const handleApproveUpdate = useCallback(async (updateId: string) => {
     const update = pendingUpdates.find(u => u.id === updateId);
@@ -1695,6 +1894,8 @@ function App() {
             comments={comments.filter(c => c.parentId === id)}
             updateHistory={pendingUpdates.filter(u => u.itemId === id)}
             onAddComment={handleAddComment}
+            onUpdateComment={handleUpdateComment}
+            onDeleteComment={handleDeleteComment}
             onUpdateTask={handleUpdateTask}
             onRateTask={handleRateTask}
             onApproveTask={handleApproveTask}
