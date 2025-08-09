@@ -32,46 +32,45 @@ const formatTime = (totalSeconds: number): string => {
 };
 
 const TimerDisplay: React.FC<{task: Task}> = ({ task }) => {
-    const calculateRemaining = () => {
-        // Ensure we have valid numbers, default to 0
+    const computeTimes = () => {
         const allocated = Number(task.allocatedTimeInSeconds) || 0;
         const spent = Number(task.timeSpentSeconds) || 0;
-        
-        // Only calculate elapsed time if timer is actually running (has timerStartTime)
+
         let elapsedSinceStart = 0;
-        if (task.timerStartTime && task.timerStartTime.trim() !== '') {
+        if (task.timerStartTime && typeof task.timerStartTime === 'string' && task.timerStartTime.trim() !== '') {
             const startTime = new Date(task.timerStartTime).getTime();
-            const currentTime = new Date().getTime();
-            // Only count elapsed time if start time is valid and not in the future
-            if (!isNaN(startTime) && startTime <= currentTime) {
-                elapsedSinceStart = (currentTime - startTime) / 1000;
+            const now = Date.now();
+            if (!isNaN(startTime) && startTime <= now) {
+                elapsedSinceStart = Math.floor((now - startTime) / 1000);
             }
         }
-        
-        const remaining = allocated - spent - elapsedSinceStart;
-        return isNaN(remaining) ? allocated - spent : remaining;
+
+        const totalElapsed = spent + elapsedSinceStart;
+        if (allocated <= 0) {
+            return { mode: 'elapsed' as const, value: totalElapsed };
+        }
+        const remainingRaw = allocated - totalElapsed;
+        const clampedRemaining = Math.max(remainingRaw, 0);
+        const overtime = Math.max(-remainingRaw, 0);
+        return { mode: 'remaining' as const, value: clampedRemaining, overtime };
     };
 
-    const [remainingSeconds, setRemainingSeconds] = useState(calculateRemaining);
+    const [timeState, setTimeState] = useState(computeTimes);
 
     useEffect(() => {
-        const newRemaining = calculateRemaining();
-        setRemainingSeconds(newRemaining);
-        
-        // Only start interval if timer is actually running
-        if (task.timerStartTime && task.timerStartTime.trim() !== '') {
-            const interval = setInterval(() => {
-                setRemainingSeconds(calculateRemaining());
-            }, 1000);
+        setTimeState(computeTimes());
+        if (task.timerStartTime && typeof task.timerStartTime === 'string' && task.timerStartTime.trim() !== '') {
+            const interval = setInterval(() => setTimeState(computeTimes()), 1000);
             return () => clearInterval(interval);
         }
     }, [task.timerStartTime, task.timeSpentSeconds, task.allocatedTimeInSeconds]);
-    
-    const isOvertime = remainingSeconds < 0;
+
+    const isElapsedMode = timeState.mode === 'elapsed';
+    const isOvertime = !isElapsedMode && (timeState as any).overtime > 0;
 
     return (
         <div className={`font-mono font-semibold ${isOvertime ? 'text-red-400' : 'text-primary-400'}`}>
-            {isOvertime && '-'}{formatTime(Math.abs(remainingSeconds))}
+            {formatTime(timeState.value)}
         </div>
     );
 };

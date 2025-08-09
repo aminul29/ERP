@@ -430,9 +430,14 @@ function App() {
               deadline: newTaskData.deadline,
               priority: newTaskData.priority,
               completionReport: newTaskData.completion_report,
-              allocatedTimeInSeconds: newTaskData.allocated_time_seconds,
+              workExperience: newTaskData.work_experience,
+              suggestions: newTaskData.suggestions,
+              completionFiles: newTaskData.completion_files,
+              driveLink: newTaskData.drive_link,
+              allocatedTimeInSeconds: newTaskData.allocated_time_in_seconds,
               timeSpentSeconds: newTaskData.time_spent_seconds,
               timerStartTime: newTaskData.timer_start_time,
+              revisionNote: newTaskData.revision_note,
               ratings: newTaskData.ratings || {}
             };
             
@@ -464,9 +469,14 @@ function App() {
               deadline: updatedTaskData.deadline,
               priority: updatedTaskData.priority,
               completionReport: updatedTaskData.completion_report,
-              allocatedTimeInSeconds: updatedTaskData.allocated_time_seconds,
+              workExperience: updatedTaskData.work_experience,
+              suggestions: updatedTaskData.suggestions,
+              completionFiles: updatedTaskData.completion_files,
+              driveLink: updatedTaskData.drive_link,
+              allocatedTimeInSeconds: updatedTaskData.allocated_time_in_seconds,
               timeSpentSeconds: updatedTaskData.time_spent_seconds,
               timerStartTime: updatedTaskData.timer_start_time,
+              revisionNote: updatedTaskData.revision_note,
               ratings: updatedTaskData.ratings || {}
             };
             

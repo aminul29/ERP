@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Task, Project, Teammate, TaskStatus, TaskPriority, Client, PendingUpdate } from '../types';
+import { Task, Project, Teammate, TaskStatus, TaskPriority, Client, PendingUpdate, Comment, Notification } from '../types';
 import { Card } from './ui/Card';
 import { Modal } from './ui/Modal';
 import { Badge } from './ui/Badge';
@@ -8,6 +8,8 @@ import { ICONS } from '../constants';
 import { StarRating } from './ui/StarRating';
 import { RichTextEditor } from './ui/RichTextEditor';
 import { formatDeadlineForDisplay, formatDeadlineForStorage } from '../lib/date-utils';
+import { ToastNotifications } from './ToastNotifications';
+// Removed conflicting real-time subscriptions - using App.tsx real-time instead
 
 const formatTime = (totalSeconds: number): string => {
     // Handle invalid numbers
@@ -21,46 +23,47 @@ const formatTime = (totalSeconds: number): string => {
 };
 
 const TimerDisplay: React.FC<{task: Task}> = ({ task }) => {
-    const calculateRemaining = () => {
-        // Ensure we have valid numbers, default to 0
-        const allocated = Number(task.allocatedTimeInSeconds) || 0;
-        const spent = Number(task.timeSpentSeconds) || 0;
-        
-        // Only calculate elapsed time if timer is actually running (has timerStartTime)
+    // When allocated time is not set (>0), we show elapsed time counting up.
+    // When allocated time is set, we show remaining time but never below 0.
+    const computeTimes = () => {
+        const allocated = Number(task.allocatedTimeInSeconds) || 0; // seconds
+        const spent = Number(task.timeSpentSeconds) || 0; // seconds already accumulated
+
         let elapsedSinceStart = 0;
-        if (task.timerStartTime && task.timerStartTime.trim() !== '') {
+        if (task.timerStartTime && typeof task.timerStartTime === 'string' && task.timerStartTime.trim() !== '') {
             const startTime = new Date(task.timerStartTime).getTime();
-            const currentTime = new Date().getTime();
-            // Only count elapsed time if start time is valid and not in the future
-            if (!isNaN(startTime) && startTime <= currentTime) {
-                elapsedSinceStart = (currentTime - startTime) / 1000;
+            const now = Date.now();
+            if (!isNaN(startTime) && startTime <= now) {
+                elapsedSinceStart = Math.floor((now - startTime) / 1000);
             }
         }
-        
-        const remaining = allocated - spent - elapsedSinceStart;
-        return isNaN(remaining) ? allocated - spent : remaining;
+
+        const totalElapsed = spent + elapsedSinceStart;
+        if (allocated <= 0) {
+            return { mode: 'elapsed' as const, value: totalElapsed };
+        }
+        const remainingRaw = allocated - totalElapsed;
+        const clampedRemaining = Math.max(remainingRaw, 0);
+        const overtime = Math.max(-remainingRaw, 0);
+        return { mode: 'remaining' as const, value: clampedRemaining, overtime };
     };
 
-    const [remainingSeconds, setRemainingSeconds] = useState(calculateRemaining);
+    const [timeState, setTimeState] = useState(computeTimes);
 
     useEffect(() => {
-        const newRemaining = calculateRemaining();
-        setRemainingSeconds(newRemaining);
-        
-        // Only start interval if timer is actually running
-        if (task.timerStartTime && task.timerStartTime.trim() !== '') {
-            const interval = setInterval(() => {
-                setRemainingSeconds(calculateRemaining());
-            }, 1000);
+        setTimeState(computeTimes());
+        if (task.timerStartTime && typeof task.timerStartTime === 'string' && task.timerStartTime.trim() !== '') {
+            const interval = setInterval(() => setTimeState(computeTimes()), 1000);
             return () => clearInterval(interval);
         }
     }, [task.timerStartTime, task.timeSpentSeconds, task.allocatedTimeInSeconds]);
-    
-    const isOvertime = remainingSeconds < 0;
+
+    const isElapsedMode = timeState.mode === 'elapsed';
+    const isOvertime = !isElapsedMode && (timeState as any).overtime > 0;
 
     return (
         <div className={`font-mono font-semibold ${isOvertime ? 'text-red-400' : 'text-primary-400'}`}>
-            {isOvertime && '-'}{formatTime(Math.abs(remainingSeconds))}
+            {formatTime(timeState.value)}{isElapsedMode ? '' : ''}
         </div>
     );
 };
@@ -114,6 +117,21 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Omit<Task, 'id' | 'timeSpentSeconds' | 'timerStartTime' | 'assignedById' | 'ratings'> | Task | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  
+  // Toast notifications state
+  const [toasts, setToasts] = useState<Array<{id: string, type: 'success' | 'info' | 'warning' | 'error', message: string}>>([]);
+  
+  // Add toast function
+  const addToast = (type: 'success' | 'info' | 'warning' | 'error', message: string) => {
+    const id = `toast-${Date.now()}`;
+    setToasts(prev => [...prev, { id, type, message }]);
+    // Auto remove toast after 5 seconds
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 5000);
+  };
+  
+  // Note: Real-time subscriptions removed to avoid conflicts with App.tsx
   
   const [reportingTask, setReportingTask] = useState<Task | null>(null);
   const [completionReport, setCompletionReport] = useState('');
@@ -1010,6 +1028,9 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                 </div>
             )}
         </Modal>
+        
+        {/* Real-time Toast Notifications */}
+        <ToastNotifications toasts={toasts} />
     </div>
   );
 };
