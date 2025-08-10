@@ -215,8 +215,21 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
       filtered = filtered.filter(task => task.assignedToId === filterAssignee);
     }
     
-    // Apply sorting
+    // Apply sorting with priority for current user's tasks
     filtered.sort((a, b) => {
+      // First priority: Tasks assigned to current user should come first
+      const aIsCurrentUser = a.assignedToId === currentUser.id;
+      const bIsCurrentUser = b.assignedToId === currentUser.id;
+      
+      if (aIsCurrentUser && !bIsCurrentUser) {
+        return -1; // a (current user's task) comes before b
+      }
+      if (!aIsCurrentUser && bIsCurrentUser) {
+        return 1; // b (current user's task) comes before a
+      }
+      
+      // If both tasks have the same assignment priority (both current user's or both others'),
+      // then sort by the selected criteria
       let aValue, bValue;
       
       switch (sortBy) {
