@@ -83,6 +83,7 @@ interface TaskManagementProps {
   divisions: string[];
   pendingUpdates: PendingUpdate[];
   onNavClick: (view: string) => void;
+  comments: Comment[]; // Add comments prop
 }
 
 const emptyTask: Omit<Task, 'id' | 'timeSpentSeconds' | 'timerStartTime' | 'assignedById' | 'ratings'> = {
@@ -111,7 +112,7 @@ const priorityColors: { [key in TaskPriority]: 'green' | 'yellow' | 'red' } = {
   [TaskPriority.High]: 'red',
 };
 
-export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects, teammates, currentUser, onAddTask, onEditTask, onUpdateTask, onDeleteTask, onRateTask, clients, divisions, pendingUpdates, onNavClick }) => {
+export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects, teammates, currentUser, onAddTask, onEditTask, onUpdateTask, onDeleteTask, onRateTask, clients, divisions, pendingUpdates, onNavClick, comments }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -167,6 +168,22 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
       return false;
     }
     return canDelete;
+  };
+
+  // Helper function to count unread comments for a specific task
+  const getUnreadCommentsCount = (taskId: string): number => {
+    // Handle case where comments is undefined or null
+    if (!comments || !Array.isArray(comments)) {
+      return 0;
+    }
+    
+    const taskComments = comments.filter(c => c.parentId === taskId);
+    return taskComments.filter(comment => {
+      // Skip own comments
+      if (comment.authorId === currentUser.id) return false;
+      // Check if current user has read this comment
+      return !comment.readBy?.includes(currentUser.id);
+    }).length;
   };
 
   // Filtered and Sorted Tasks
@@ -567,7 +584,14 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                     <tr key={task.id} className="border-b border-gray-800 hover:bg-gray-700/50">
                       <td className="p-4 font-medium">
                         <button onClick={() => onNavClick(`taskDetail/${task.id}`)} className="text-left hover:text-primary-400 transition-colors" title={task.description}>
-                            {task.title}
+                            <div className="flex items-center space-x-2">
+                              <span>{task.title}</span>
+                              {getUnreadCommentsCount(task.id) > 0 && (
+                                <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                                  {getUnreadCommentsCount(task.id)}
+                                </span>
+                              )}
+                            </div>
                         </button>
                       </td>
                       {isManager && <td className="p-4 text-gray-300">{teammates.find(e => e.id === task.assignedToId)?.name}</td>}
@@ -666,7 +690,14 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                 <Card key={task.id} className="p-4 hover:bg-gray-800/50 transition-colors">
                   <div className="flex justify-between items-start mb-3">
                       <button onClick={() => onNavClick(`taskDetail/${task.id}`)} className="text-left font-semibold text-lg text-white hover:text-primary-400 pr-2 line-clamp-2">
-                          {task.title}
+                          <div className="flex items-center space-x-2">
+                            <span>{task.title}</span>
+                            {getUnreadCommentsCount(task.id) > 0 && (
+                              <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                                {getUnreadCommentsCount(task.id)}
+                              </span>
+                            )}
+                          </div>
                       </button>
                       <Badge color={priorityColors[task.priority]}>{task.priority}</Badge>
                   </div>
@@ -752,7 +783,14 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
             <Card key={task.id} className="p-4">
               <div className="flex justify-between items-start">
                   <button onClick={() => onNavClick(`taskDetail/${task.id}`)} className="text-left font-semibold text-lg text-white hover:text-primary-400 pr-2">
-                      {task.title}
+                      <div className="flex items-center space-x-2">
+                        <span>{task.title}</span>
+                        {getUnreadCommentsCount(task.id) > 0 && (
+                          <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                            {getUnreadCommentsCount(task.id)}
+                          </span>
+                        )}
+                      </div>
                   </button>
                   <Badge color={priorityColors[task.priority]}>{task.priority}</Badge>
               </div>

@@ -1898,7 +1898,7 @@ function App() {
       case 'projects':
         return <ProjectManagement projects={projects} tasks={tasks} clients={clients} teammates={approvedTeammates} onAddProject={handleAddProject} onUpdateProject={handleUpdateProject} onRateProject={handleRateProject} currentUser={currentUser} pendingUpdates={pendingUpdates.filter(u=>u.status === 'pending')} onNavClick={handleNavClick} divisions={erpSettings.divisions} onAddClient={handleAddClient} />;
       case 'tasks':
-        return <TaskManagement tasks={tasks} projects={projects} teammates={approvedTeammates} currentUser={currentUser} onAddTask={handleAddTask} onEditTask={handleEditTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onRateTask={handleRateTask} clients={clients} divisions={erpSettings.divisions} pendingUpdates={pendingUpdates.filter(u=>u.status === 'pending')} onNavClick={handleNavClick} />;
+        return <TaskManagement tasks={tasks} projects={projects} teammates={approvedTeammates} currentUser={currentUser} onAddTask={handleAddTask} onEditTask={handleEditTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onRateTask={handleRateTask} clients={clients} divisions={erpSettings.divisions} pendingUpdates={pendingUpdates.filter(u=>u.status === 'pending')} onNavClick={handleNavClick} comments={comments} />;
       case 'time':
         return <TimeTracking timeLogs={timeLogs} teammates={approvedTeammates} currentUser={currentUser} onLogTime={handleLogTime} dailyTimeGoal={erpSettings.dailyTimeGoal} />;
       case 'salary':
