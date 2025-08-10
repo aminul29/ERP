@@ -344,7 +344,8 @@ export class RealtimeService {
       parentId: dbComment.parent_id,
       authorId: dbComment.author_id,
       text: dbComment.text,
-      timestamp: dbComment.created_at
+      timestamp: dbComment.created_at,
+      readBy: dbComment.read_by || []
     };
   }
   

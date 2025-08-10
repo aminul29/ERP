@@ -239,6 +239,7 @@ interface EditableCommentProps {
     canDelete: boolean;
     onUpdate: (commentId: string, newText: string) => void;
     onDelete: (commentId: string) => void;
+    onMarkAsRead: (commentId: string) => void;
     timeAgo: string;
 }
 
@@ -250,6 +251,7 @@ const EditableComment: React.FC<EditableCommentProps> = ({
     canDelete,
     onUpdate,
     onDelete,
+    onMarkAsRead,
     timeAgo
 }) => {
     // Debug props
@@ -315,18 +317,79 @@ const EditableComment: React.FC<EditableCommentProps> = ({
         }
     };
 
+    // Determine if the current user has read this comment
+    const isReadByCurrentUser = comment.readBy && comment.readBy.includes(currentUser.id);
+    const isOwnComment = comment.authorId === currentUser.id;
+    
+    // Debug read status
+    console.log(`📖 Comment ${comment.id} read status:`, {
+        commentId: comment.id,
+        readBy: comment.readBy,
+        currentUserId: currentUser.id,
+        isReadByCurrentUser,
+        isOwnComment
+    });
+    
     return (
-        <div className="flex items-start space-x-3">
-            <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center font-bold text-sm flex-shrink-0">
+        <div className={`flex items-start space-x-3 p-3 rounded-lg transition-all duration-200 ${
+            !isOwnComment && !isReadByCurrentUser 
+                ? 'bg-amber-900/20 border-l-4 border-amber-500/50' 
+                : 'bg-gray-800/30'
+        }`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${
+                !isOwnComment && !isReadByCurrentUser 
+                    ? 'bg-amber-600 text-amber-100' 
+                    : 'bg-gray-600 text-gray-100'
+            }`}>
                 {author?.name.charAt(0) || '?'}
             </div>
             <div className="flex-1">
                 <div className="flex items-center justify-between">
-                    <p className="text-sm">
-                        <span className="font-semibold text-white">{author?.name || 'Unknown'}</span>
-                        <span className="text-gray-400 ml-2">{timeAgo}</span>
+                    <p className="text-sm flex items-center gap-2">
+                        <span className={`font-semibold ${
+                            !isOwnComment && !isReadByCurrentUser 
+                                ? 'text-amber-100' 
+                                : 'text-white'
+                        }`}>{author?.name || 'Unknown'}</span>
+                        <span className="text-gray-400">{timeAgo}</span>
+                        {/* Read status indicator */}
+                        {!isOwnComment && (
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                isReadByCurrentUser 
+                                    ? 'bg-green-800/30 text-green-300 border border-green-600/30' 
+                                    : 'bg-amber-800/30 text-amber-300 border border-amber-600/30'
+                            }`}>
+                                {isReadByCurrentUser ? (
+                                    <>
+                                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                        Read
+                                    </>
+                                ) : (
+                                    <>
+                                        <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                        </svg>
+                                        New
+                                    </>
+                                )}
+                            </span>
+                        )}
                     </p>
                     <div className="flex items-center space-x-1">
+                        {/* Mark as read icon - only show if current user hasn't read this comment */}
+                        {!isOwnComment && !isReadByCurrentUser && (
+                            <button
+                                onClick={() => onMarkAsRead(comment.id)}
+                                className="text-xs text-amber-400 hover:text-green-400 p-1.5 rounded-lg bg-amber-900/20 hover:bg-green-900/20 transition-all duration-200 border border-amber-600/30 hover:border-green-600/30"
+                                title="Mark as read"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                            </button>
+                        )}
                         {canEdit && (
                             <button
                                 onClick={handleStartEdit}
@@ -381,7 +444,11 @@ const EditableComment: React.FC<EditableCommentProps> = ({
                         </div>
                     </div>
                 ) : (
-                    <p className="p-2 bg-gray-700/50 rounded-md mt-1 text-white break-words">
+                    <p className={`p-3 rounded-md mt-2 break-words transition-all duration-200 ${
+                        !isOwnComment && !isReadByCurrentUser 
+                            ? 'bg-amber-900/10 text-amber-100 border border-amber-600/20' 
+                            : 'bg-gray-700/50 text-white border border-gray-600/30'
+                    }`}>
                         {comment.text}
                     </p>
                 )}
@@ -426,6 +493,7 @@ interface TaskDetailProps {
     onAddComment: (parentId: string, text: string) => void;
     onUpdateComment: (commentId: string, newText: string) => void;
     onDeleteComment: (commentId: string) => void;
+    onMarkCommentAsRead: (commentId: string) => void;
     onUpdateTask: (task: Task) => void;
     onRateTask: (taskId: string, rating: number, rater: 'assigner' | 'ceo') => void;
     onApproveTask?: (taskId: string) => void;
@@ -433,7 +501,7 @@ interface TaskDetailProps {
     onNavClick: (view: string) => void;
 }
 
-export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, allTeammates, currentUser, comments, updateHistory, onAddComment, onUpdateComment, onDeleteComment, onUpdateTask, onRateTask, onApproveTask, onRequestRevision, onNavClick }) => {
+export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, allTeammates, currentUser, comments, updateHistory, onAddComment, onUpdateComment, onDeleteComment, onMarkCommentAsRead, onUpdateTask, onRateTask, onApproveTask, onRequestRevision, onNavClick }) => {
     const [newComment, setNewComment] = useState('');
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [isRevisionModalOpen, setIsRevisionModalOpen] = useState(false);
@@ -725,6 +793,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, a
                                            canDelete={canDeleteComment}
                                            onUpdate={onUpdateComment}
                                            onDelete={onDeleteComment}
+                                           onMarkAsRead={onMarkCommentAsRead}
                                            timeAgo={timeAgo(item.date)}
                                        />
                                     )

@@ -531,7 +531,8 @@ function App() {
               parentId: newCommentData.parent_id,
               authorId: newCommentData.author_id,
               text: newCommentData.text,
-              timestamp: newCommentData.created_at
+              timestamp: newCommentData.created_at,
+              readBy: newCommentData.read_by || []
             };
             
             // Add to local state if not already present
@@ -554,7 +555,8 @@ function App() {
               parentId: updatedCommentData.parent_id,
               authorId: updatedCommentData.author_id,
               text: updatedCommentData.text,
-              timestamp: updatedCommentData.created_at
+              timestamp: updatedCommentData.created_at,
+              readBy: updatedCommentData.read_by || []
             };
             
             setComments(prev => prev.map(c => 
@@ -1702,6 +1704,45 @@ function App() {
     }
   }, [currentUser, comments]);
 
+  const handleMarkCommentAsRead = useCallback(async (commentId: string) => {
+    if (!currentUser) return;
+    
+    const commentToUpdate = comments.find(c => c.id === commentId);
+    if (!commentToUpdate) {
+      console.error('❌ Comment not found:', commentId);
+      return;
+    }
+    
+    // Check if user has already marked this comment as read
+    if (commentToUpdate.readBy?.includes(currentUser.id)) {
+      console.log('📖 Comment already marked as read by current user');
+      return;
+    }
+    
+    // Add current user to readBy array
+    const updatedReadBy = commentToUpdate.readBy ? [...commentToUpdate.readBy, currentUser.id] : [currentUser.id];
+    const updatedComment = { ...commentToUpdate, readBy: updatedReadBy };
+    
+    try {
+      // Update comment in database
+      const result = await DatabaseOperations.updateComment(updatedComment);
+      
+      if (result) {
+        console.log('✅ Comment marked as read successfully:', result);
+        // Update local state only if database update succeeds
+        setComments(prev => prev.map(c => c.id === commentId ? result : c));
+      } else {
+        console.error('❌ Failed to mark comment as read - no data returned');
+      }
+    } catch (error) {
+      console.error('❌ Error marking comment as read:', error);
+      // Fallback: update comment locally if database fails
+      setComments(prev => prev.map(c => 
+        c.id === commentId ? updatedComment : c
+      ));
+    }
+  }, [currentUser, comments]);
+
   const handleApproveUpdate = useCallback(async (updateId: string) => {
     const update = pendingUpdates.find(u => u.id === updateId);
     if (!update || !currentUser) return;
@@ -1906,6 +1947,7 @@ function App() {
             onAddComment={handleAddComment}
             onUpdateComment={handleUpdateComment}
             onDeleteComment={handleDeleteComment}
+            onMarkCommentAsRead={handleMarkCommentAsRead}
             onUpdateTask={handleUpdateTask}
             onRateTask={handleRateTask}
             onApproveTask={handleApproveTask}

@@ -227,7 +227,8 @@ export const loadFromDatabase = {
         parentId: row.parent_id,
         authorId: row.author_id,
         text: row.text,
-        timestamp: row.created_at
+        timestamp: row.created_at,
+        readBy: row.read_by || []
       }));
     } catch (error) {
       console.error('Error loading comments:', error);

@@ -169,6 +169,7 @@ export interface Comment {
     text: string;
     timestamp: string;
     historyItemType?: 'comment';
+    readBy?: string[]; // Array of user IDs who have read this comment
 }
 
 export type ProjectPendingUpdate = {

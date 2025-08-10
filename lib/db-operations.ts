@@ -520,12 +520,21 @@ export class DatabaseOperations {
   static async updateComment(comment: Comment): Promise<Comment | null> {
     try {
       console.log('🔄 Updating comment in database:', comment.id);
+      console.log('📋 Comment data to update:', comment);
+      
+      const updateData: any = {
+        text: comment.text
+      };
+      
+      // Include readBy if it exists
+      if (comment.readBy !== undefined) {
+        updateData.read_by = comment.readBy;
+        console.log('📖 Updating readBy field:', comment.readBy);
+      }
+      
       const { data, error } = await supabase
         .from('comments')
-        .update({
-          text: comment.text
-          // Don't update parent_id, author_id, or timestamps
-        })
+        .update(updateData)
         .eq('id', comment.id)
         .select()
         .single();
