@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ICONS } from '../constants';
-import { Teammate, Task } from '../types';
+import { Teammate, Task, PendingUpdate } from '../types';
 
 interface SidebarProps {
   activeView: string;
@@ -11,6 +11,7 @@ interface SidebarProps {
   isMobileSidebarOpen: boolean;
   setIsMobileSidebarOpen: (isOpen: boolean) => void;
   tasks: Task[];
+  pendingUpdates: PendingUpdate[];
 }
 
 const navItems = [
@@ -29,7 +30,7 @@ const navItems = [
   { id: 'settings', label: 'ERP Settings', icon: ICONS.settings, allowedRoles: ['CEO'] },
 ];
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavClick, currentUser, isMobileSidebarOpen, setIsMobileSidebarOpen, tasks }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavClick, currentUser, isMobileSidebarOpen, setIsMobileSidebarOpen, tasks, pendingUpdates }) => {
   const handleItemClick = (view: string) => {
     onNavClick(view);
     setIsMobileSidebarOpen(false);
@@ -41,6 +42,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavClick, curren
     t.status !== 'Done' && 
     t.status !== 'Completed'
   ).length;
+  
+  // Calculate pending approvals count for CEO
+  const pendingApprovalsCount = pendingUpdates.filter(u => u.status === 'pending').length;
   
   return (
     <>
@@ -76,6 +80,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavClick, curren
                 {item.id === 'tasks' && assignedTasksCount > 0 && (
                   <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">
                     {assignedTasksCount}
+                  </span>
+                )}
+                {item.id === 'approvals' && currentUser.role === 'CEO' && pendingApprovalsCount > 0 && (
+                  <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-orange-100 bg-orange-600 rounded-full">
+                    {pendingApprovalsCount}
                   </span>
                 )}
               </button>

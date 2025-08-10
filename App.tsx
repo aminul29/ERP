@@ -145,7 +145,8 @@ function App() {
   // ERP Settings now loaded from database
   const [erpSettings, setErpSettings] = useState<ErpSettings>(initialErpSettings);
   const [erpSettingsLoaded, setErpSettingsLoaded] = useState(false);
-  const [pendingUpdates, setPendingUpdates] = useState<PendingUpdate[]>(() => loadState('erp_pendingUpdates', []));
+  const [pendingUpdates, setPendingUpdates] = useState<PendingUpdate[]>([]);
+  const [pendingUpdatesLoaded, setPendingUpdatesLoaded] = useState(false);
   const [comments, setComments] = useState<Comment[]>(() => loadState('erp_comments', initialComments));
   const [pendingAssignments, setPendingAssignments] = useState<Project[]>([]);
   // Announcements now loaded from database
@@ -346,6 +347,38 @@ function App() {
     };
     
     loadAnnouncements();
+  }, []);
+
+  // Load Pending Updates from database on app start
+  useEffect(() => {
+    const loadPendingUpdates = async () => {
+      try {
+        const pendingUpdatesData = await loadFromDatabase.pendingUpdates();
+        console.log('⏳ Loaded pending updates from database:', pendingUpdatesData);
+        if (pendingUpdatesData && pendingUpdatesData.length > 0) {
+          // Filter only pending status updates
+          const activePendingUpdates = pendingUpdatesData.filter(update => update.status === 'pending');
+          setPendingUpdates(activePendingUpdates);
+          console.log('⏳ Active pending updates:', activePendingUpdates);
+        } else {
+          // If no pending updates in database, check localStorage as fallback
+          console.log('No pending updates found in database, checking localStorage fallback...');
+          const localPendingUpdates = loadState('erp_pendingUpdates', []);
+          console.log('⏳ Using fallback pending updates:', localPendingUpdates);
+          setPendingUpdates(localPendingUpdates);
+        }
+      } catch (error) {
+        console.error('Failed to load pending updates from database:', error);
+        // Fallback to localStorage then empty array
+        const localPendingUpdates = loadState('erp_pendingUpdates', []);
+        console.log('⏳ Error fallback pending updates:', localPendingUpdates);
+        setPendingUpdates(localPendingUpdates);
+      } finally {
+        setPendingUpdatesLoaded(true);
+      }
+    };
+    
+    loadPendingUpdates();
   }, []);
 
   // Real-time notifications subscription
@@ -613,6 +646,111 @@ function App() {
     };
   }, []); // No dependency on comments loaded state since comments are always needed
 
+  // Real-time pending updates subscription
+  useEffect(() => {
+    if (!pendingUpdatesLoaded) return;
+    
+    console.log('🔄 Setting up real-time pending updates subscription...');
+    
+    // Subscribe to pending_updates table changes
+    const subscription = supabase
+      .channel('pending-updates-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'pending_updates'
+        },
+        async (payload) => {
+          console.log('⏳ Real-time pending update change:', payload);
+          
+          if (payload.eventType === 'INSERT') {
+            // New pending update created
+            const newUpdateData = payload.new;
+            console.log('🆕 New pending update inserted:', newUpdateData);
+            
+            // Only add if status is pending
+            if (newUpdateData.status === 'pending') {
+              // Map the database row to our pending update format
+              const newPendingUpdate: PendingUpdate = {
+                id: newUpdateData.id,
+                type: newUpdateData.type,
+                itemId: newUpdateData.item_id,
+                requestedBy: newUpdateData.requested_by,
+                requesterName: newUpdateData.requester_name,
+                requestedAt: newUpdateData.requested_at,
+                data: newUpdateData.data,
+                originalData: newUpdateData.original_data,
+                status: newUpdateData.status,
+                resolvedAt: newUpdateData.resolved_at,
+                resolvedBy: newUpdateData.resolved_by
+              };
+              
+              // Add to local state if not already present
+              setPendingUpdates(prev => {
+                const exists = prev.find(u => u.id === newPendingUpdate.id);
+                if (!exists) {
+                  console.log('➕ Adding new pending update to state:', newPendingUpdate);
+                  return [newPendingUpdate, ...prev];
+                }
+                console.log('🔄 Pending update already exists in state:', newPendingUpdate.id);
+                return prev;
+              });
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            // Pending update updated (e.g., approved/rejected)
+            const updatedUpdateData = payload.new;
+            console.log('🔄 Pending update updated:', updatedUpdateData);
+            
+            const updatedPendingUpdate: PendingUpdate = {
+              id: updatedUpdateData.id,
+              type: updatedUpdateData.type,
+              itemId: updatedUpdateData.item_id,
+              requestedBy: updatedUpdateData.requested_by,
+              requesterName: updatedUpdateData.requester_name,
+              requestedAt: updatedUpdateData.requested_at,
+              data: updatedUpdateData.data,
+              originalData: updatedUpdateData.original_data,
+              status: updatedUpdateData.status,
+              resolvedAt: updatedUpdateData.resolved_at,
+              resolvedBy: updatedUpdateData.resolved_by
+            };
+            
+            setPendingUpdates(prev => {
+              if (updatedPendingUpdate.status === 'pending') {
+                // Update existing or add if not present
+                const exists = prev.find(u => u.id === updatedPendingUpdate.id);
+                if (exists) {
+                  return prev.map(u => u.id === updatedPendingUpdate.id ? updatedPendingUpdate : u);
+                } else {
+                  return [updatedPendingUpdate, ...prev];
+                }
+              } else {
+                // Remove from pending list if status changed to approved/rejected
+                return prev.filter(u => u.id !== updatedPendingUpdate.id);
+              }
+            });
+          } else if (payload.eventType === 'DELETE') {
+            // Pending update deleted
+            const deletedUpdateData = payload.old;
+            console.log('🗑️ Pending update deleted:', deletedUpdateData);
+            
+            setPendingUpdates(prev => prev.filter(u => u.id !== deletedUpdateData.id));
+          }
+        }
+      )
+      .subscribe();
+      
+    console.log('✓ Real-time pending updates subscription active');
+    
+    // Cleanup subscription on unmount
+    return () => {
+      console.log('🗑️ Cleaning up pending updates subscription');
+      subscription.unsubscribe();
+    };
+  }, [pendingUpdatesLoaded]);
+
   // Effects to save state changes to localStorage (gradually migrating to database)
   // Teammates now managed through database operations, no localStorage sync needed
   // Clients now managed through database operations, no localStorage sync needed
@@ -636,7 +774,7 @@ function App() {
     }
   }, [erpSettings, erpSettingsLoaded]);
   useEffect(() => { localStorage.setItem('erp_currentUserId', JSON.stringify(currentUserId)); }, [currentUserId]);
-  useEffect(() => { localStorage.setItem('erp_pendingUpdates', JSON.stringify(pendingUpdates)); }, [pendingUpdates]);
+  // Pending updates now managed through database operations, no localStorage sync needed
   // Comments now managed through database operations, no localStorage sync needed
 
   useEffect(() => {
@@ -952,9 +1090,46 @@ function App() {
     }
   }, [teammates]);
   
-  const handleRequestRoleChange = useCallback((newRole: string, justification: string) => {
+  const handleRequestRoleChange = useCallback(async (newRole: string, justification: string) => {
     if (!currentUser) return;
-    const newUpdate: TeammatePendingUpdate = {
+    
+    const newUpdateData = {
+        type: 'teammate' as const,
+        itemId: currentUser.id,
+        requestedBy: currentUser.id,
+        requesterName: currentUser.name,
+        requestedAt: new Date().toISOString(),
+        data: { role: newRole, justification },
+        originalData: { role: currentUser.role },
+        status: 'pending' as const,
+    };
+    
+    try {
+      // Create pending update in database
+      const createdUpdate = await DatabaseOperations.createPendingUpdate(newUpdateData);
+      
+      if (createdUpdate) {
+        console.log('✅ Role change request created in database:', createdUpdate);
+        // Update local state only if database create succeeds
+        setPendingUpdates(prev => [createdUpdate, ...prev]);
+        
+        // Send notification to CEO
+        const ceo = teammates.find(e => e.role === 'CEO');
+        if (ceo) {
+          await addNotification({
+            userId: ceo.id,
+            message: `${currentUser.name} requested a role change to ${newRole}.`,
+            read: false,
+            link: 'approvals'
+          });
+        }
+      } else {
+        console.error('❌ Failed to create role change request - no data returned');
+      }
+    } catch (error) {
+      console.error('❌ Error creating role change request:', error);
+      // Fallback: create pending update locally if database fails
+      const fallbackUpdate: TeammatePendingUpdate = {
         id: `update_${new Date().getTime()}`,
         type: 'teammate',
         itemId: currentUser.id,
@@ -964,17 +1139,19 @@ function App() {
         data: { role: newRole, justification },
         originalData: { role: currentUser.role },
         status: 'pending',
-    };
-    setPendingUpdates(prev => [...prev, newUpdate]);
-
-    const ceo = teammates.find(e => e.role === 'CEO');
-    if (ceo) {
-        addNotification({
-            userId: ceo.id,
-            message: `${currentUser.name} requested a role change to ${newRole}.`,
-            read: false,
-            link: 'approvals'
+      };
+      setPendingUpdates(prev => [fallbackUpdate, ...prev]);
+      
+      // Still try to notify CEO
+      const ceo = teammates.find(e => e.role === 'CEO');
+      if (ceo) {
+        await addNotification({
+          userId: ceo.id,
+          message: `${currentUser.name} requested a role change to ${newRole}.`,
+          read: false,
+          link: 'approvals'
         });
+      }
     }
   }, [currentUser, teammates, addNotification]);
 
@@ -1035,7 +1212,7 @@ function App() {
     }
   }, [projects, addNotification, currentUser]);
 
-  const handleUpdateProject = useCallback((updatedProject: Project) => {
+  const handleUpdateProject = useCallback(async (updatedProject: Project) => {
     if (!currentUser) return;
     if (currentUser.role === 'CEO') {
         setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
@@ -1062,7 +1239,41 @@ function App() {
 
         if (Object.keys(changes).length === 0) return;
 
-        const newUpdate: ProjectPendingUpdate = {
+        const newUpdateData = {
+            type: 'project' as const,
+            itemId: updatedProject.id,
+            requestedBy: currentUser.id,
+            requesterName: currentUser.name,
+            requestedAt: new Date().toISOString(),
+            data: changes,
+            originalData: originalChanges,
+            status: 'pending' as const,
+        };
+        
+        try {
+          // Create pending update in database
+          const createdUpdate = await DatabaseOperations.createPendingUpdate(newUpdateData);
+          
+          if (createdUpdate) {
+            console.log('✅ Project change request created in database:', createdUpdate);
+            setPendingUpdates(prev => [createdUpdate, ...prev]);
+            
+            const ceo = teammates.find(e => e.role === 'CEO');
+            if (ceo) {
+              await addNotification({
+                userId: ceo.id,
+                message: `${currentUser.name} requested changes to project "${updatedProject.name}".`,
+                read: false,
+                link: 'approvals'
+              });
+            }
+          } else {
+            console.error('❌ Failed to create project change request - no data returned');
+          }
+        } catch (error) {
+          console.error('❌ Error creating project change request:', error);
+          // Fallback: create pending update locally
+          const fallbackUpdate: ProjectPendingUpdate = {
             id: `update_${new Date().getTime()}`,
             type: 'project',
             itemId: updatedProject.id,
@@ -1072,17 +1283,18 @@ function App() {
             data: changes,
             originalData: originalChanges,
             status: 'pending',
-        };
-        setPendingUpdates(prev => [...prev, newUpdate]);
-        
-        const ceo = teammates.find(e => e.role === 'CEO');
-        if (ceo) {
-            addNotification({
-                userId: ceo.id,
-                message: `${currentUser.name} requested changes to project "${updatedProject.name}".`,
-                read: false,
-                link: 'approvals'
+          };
+          setPendingUpdates(prev => [fallbackUpdate, ...prev]);
+          
+          const ceo = teammates.find(e => e.role === 'CEO');
+          if (ceo) {
+            await addNotification({
+              userId: ceo.id,
+              message: `${currentUser.name} requested changes to project "${updatedProject.name}".`,
+              read: false,
+              link: 'approvals'
             });
+          }
         }
     }
   }, [currentUser, projects, teammates, addNotification]);
@@ -1237,7 +1449,41 @@ function App() {
           '(not task assigner)';
         console.log(`📋 Sending task edit for CEO approval ${approvalReason}`);
 
-        const newUpdate: TaskPendingUpdate = {
+        const newUpdateData = {
+            type: 'task' as const,
+            itemId: editedTask.id,
+            requestedBy: currentUser.id,
+            requesterName: currentUser.name,
+            requestedAt: new Date().toISOString(),
+            data: changes,
+            originalData: originalChanges,
+            status: 'pending' as const,
+        };
+        
+        try {
+          // Create pending update in database
+          const createdUpdate = await DatabaseOperations.createPendingUpdate(newUpdateData);
+          
+          if (createdUpdate) {
+            console.log('✅ Task change request created in database:', createdUpdate);
+            setPendingUpdates(prev => [createdUpdate, ...prev]);
+            
+            const ceo = teammates.find(e => e.role === 'CEO');
+            if (ceo) {
+              await addNotification({
+                userId: ceo.id,
+                message: `${currentUser.name} requested changes to task "${editedTask.title}".`,
+                read: false,
+                link: 'approvals'
+              });
+            }
+          } else {
+            console.error('❌ Failed to create task change request - no data returned');
+          }
+        } catch (error) {
+          console.error('❌ Error creating task change request:', error);
+          // Fallback: create pending update locally
+          const fallbackUpdate: TaskPendingUpdate = {
             id: `update_${new Date().getTime()}`,
             type: 'task',
             itemId: editedTask.id,
@@ -1247,22 +1493,23 @@ function App() {
             data: changes,
             originalData: originalChanges,
             status: 'pending',
-        };
-        setPendingUpdates(prev => [...prev, newUpdate]);
+          };
+          setPendingUpdates(prev => [fallbackUpdate, ...prev]);
 
-        const ceo = teammates.find(e => e.role === 'CEO');
-        if (ceo) {
+          const ceo = teammates.find(e => e.role === 'CEO');
+          if (ceo) {
             await addNotification({
-                userId: ceo.id,
-                message: `${currentUser.name} requested changes to task "${editedTask.title}".`,
-                read: false,
-                link: 'approvals'
+              userId: ceo.id,
+              message: `${currentUser.name} requested changes to task "${editedTask.title}".`,
+              read: false,
+              link: 'approvals'
             });
+          }
         }
      }
   }, [currentUser, tasks, teammates, addNotification]);
   
-    const handleProjectTaskUpdate = useCallback((updatedTask: Task) => {
+    const handleProjectTaskUpdate = useCallback(async (updatedTask: Task) => {
         if (!currentUser) return;
         const originalTask = tasks.find(t => t.id === updatedTask.id);
         if (!originalTask) return;
@@ -1279,7 +1526,7 @@ function App() {
             }
         };
         
-        const sendForApproval = () => {
+        const sendForApproval = async () => {
             const changes: Partial<Task> = {};
             const originalChanges: Partial<Task> = {};
             (Object.keys(updatedTask) as Array<keyof Task>).forEach(key => {
@@ -1290,7 +1537,41 @@ function App() {
                 }
             });
             if (Object.keys(changes).length === 0) return;
-            const newUpdate: TaskPendingUpdate = {
+            const newUpdateData = {
+                type: 'task' as const,
+                itemId: updatedTask.id,
+                requestedBy: currentUser.id,
+                requesterName: currentUser.name,
+                requestedAt: new Date().toISOString(),
+                data: changes,
+                originalData: originalChanges,
+                status: 'pending' as const,
+            };
+            
+            try {
+              // Create pending update in database
+              const createdUpdate = await DatabaseOperations.createPendingUpdate(newUpdateData);
+              
+              if (createdUpdate) {
+                console.log('✅ Task change request created in database:', createdUpdate);
+                setPendingUpdates(prev => [createdUpdate, ...prev]);
+                
+                const ceo = teammates.find(e => e.role === 'CEO');
+                if (ceo) {
+                  addNotification({
+                    userId: ceo.id,
+                    message: `${currentUser.name} requested changes to task "${updatedTask.title}".`,
+                    read: false,
+                    link: 'approvals'
+                  });
+                }
+              } else {
+                console.error('❌ Failed to create task change request - no data returned');
+              }
+            } catch (error) {
+              console.error('❌ Error creating task change request:', error);
+              // Fallback: create pending update locally
+              const fallbackUpdate: TaskPendingUpdate = {
                 id: `update_${new Date().getTime()}`,
                 type: 'task',
                 itemId: updatedTask.id,
@@ -1300,23 +1581,25 @@ function App() {
                 data: changes,
                 originalData: originalChanges,
                 status: 'pending',
-            };
-            setPendingUpdates(prev => [...prev, newUpdate]);
-            const ceo = teammates.find(e => e.role === 'CEO');
-            if (ceo) {
+              };
+              setPendingUpdates(prev => [fallbackUpdate, ...prev]);
+              
+              const ceo = teammates.find(e => e.role === 'CEO');
+              if (ceo) {
                 addNotification({
-                    userId: ceo.id,
-                    message: `${currentUser.name} requested changes to task "${updatedTask.title}".`,
-                    read: false,
-                    link: 'approvals'
+                  userId: ceo.id,
+                  message: `${currentUser.name} requested changes to task "${updatedTask.title}".`,
+                  read: false,
+                  link: 'approvals'
                 });
+              }
             }
         };
 
         if (originalTask.status === TaskStatus.ToDo || currentUser.role === 'CEO') {
             performDirectUpdate();
         } else {
-            sendForApproval();
+            await sendForApproval();
         }
     }, [currentUser, tasks, teammates, addNotification, setPendingUpdates]);
 
@@ -1392,29 +1675,65 @@ function App() {
       console.log('📋 Task has started - sending delete request for CEO approval');
       
       // Create a pending update for deletion
-      const deleteRequest: TaskPendingUpdate = {
-        id: `delete_${new Date().getTime()}`,
-        type: 'task',
+      const deleteRequestData = {
+        type: 'task' as const,
         itemId: taskId,
         requestedBy: currentUser.id,
         requesterName: currentUser.name,
         requestedAt: new Date().toISOString(),
         data: { _action: 'delete' }, // Special marker for delete requests
         originalData: task,
-        status: 'pending',
+        status: 'pending' as const,
       };
       
-      setPendingUpdates(prev => [...prev, deleteRequest]);
-      
-      // Notify CEO
-      const ceo = teammates.find(e => e.role === 'CEO');
-      if (ceo) {
-        await addNotification({
-          userId: ceo.id,
-          message: `${currentUser.name} requested to delete task "${task.title}" (task has been started).`,
-          read: false,
-          link: 'approvals'
-        });
+      try {
+        // Create pending update in database
+        const createdUpdate = await DatabaseOperations.createPendingUpdate(deleteRequestData);
+        
+        if (createdUpdate) {
+          console.log('✅ Task delete request created in database:', createdUpdate);
+          setPendingUpdates(prev => [createdUpdate, ...prev]);
+          
+          // Notify CEO
+          const ceo = teammates.find(e => e.role === 'CEO');
+          if (ceo) {
+            await addNotification({
+              userId: ceo.id,
+              message: `${currentUser.name} requested to delete task "${task.title}" (task has been started).`,
+              read: false,
+              link: 'approvals'
+            });
+          }
+        } else {
+          console.error('❌ Failed to create task delete request - no data returned');
+        }
+      } catch (error) {
+        console.error('❌ Error creating task delete request:', error);
+        // Fallback: create pending update locally
+        const fallbackDeleteRequest: TaskPendingUpdate = {
+          id: `delete_${new Date().getTime()}`,
+          type: 'task',
+          itemId: taskId,
+          requestedBy: currentUser.id,
+          requesterName: currentUser.name,
+          requestedAt: new Date().toISOString(),
+          data: { _action: 'delete' },
+          originalData: task,
+          status: 'pending',
+        };
+        
+        setPendingUpdates(prev => [fallbackDeleteRequest, ...prev]);
+        
+        // Notify CEO
+        const ceo = teammates.find(e => e.role === 'CEO');
+        if (ceo) {
+          await addNotification({
+            userId: ceo.id,
+            message: `${currentUser.name} requested to delete task "${task.title}" (task has been started).`,
+            read: false,
+            link: 'approvals'
+          });
+        }
       }
       return;
     }
@@ -1827,39 +2146,86 @@ function App() {
         ));
     }
 
-
-    setPendingUpdates(prev => prev.map(u => u.id === updateId ? {
+    try {
+      // Update the pending update status in database
+      const updatedPendingUpdate = {
+        ...update,
+        status: 'approved' as const,
+        resolvedAt: new Date().toISOString(),
+        resolvedBy: currentUser.id,
+      };
+      
+      const result = await DatabaseOperations.updatePendingUpdate(updatedPendingUpdate);
+      
+      if (result) {
+        console.log('✅ Pending update approved in database:', result);
+        // Remove from local pending updates since it's no longer pending
+        setPendingUpdates(prev => prev.filter(u => u.id !== updateId));
+      } else {
+        console.error('❌ Failed to update pending update status in database');
+        // Fallback: update local state
+        setPendingUpdates(prev => prev.map(u => u.id === updateId ? updatedPendingUpdate : u));
+      }
+    } catch (error) {
+      console.error('❌ Error updating pending update status:', error);
+      // Fallback: update local state
+      setPendingUpdates(prev => prev.map(u => u.id === updateId ? {
         ...u,
         status: 'approved',
         resolvedAt: new Date().toISOString(),
         resolvedBy: currentUser.id,
-    } : u));
+      } : u));
+    }
 
-    addNotification({
+    await addNotification({
         userId: update.requestedBy,
         message: `Your requested change for ${update.type} has been approved.`,
         read: false,
         link: `${update.type}Detail/${update.itemId}`
     });
-  }, [pendingUpdates, addNotification, currentUser, projects]);
+  }, [pendingUpdates, addNotification, currentUser, projects, tasks, teammates]);
 
-  const handleRejectUpdate = useCallback((updateId: string) => {
+  const handleRejectUpdate = useCallback(async (updateId: string) => {
       const update = pendingUpdates.find(u => u.id === updateId);
       if (!update || !currentUser) return;
 
-      setPendingUpdates(prev => prev.map(u => u.id === updateId ? {
+      try {
+        // Update the pending update status in database
+        const updatedPendingUpdate = {
+          ...update,
+          status: 'rejected' as const,
+          resolvedAt: new Date().toISOString(),
+          resolvedBy: currentUser.id,
+        };
+        
+        const result = await DatabaseOperations.updatePendingUpdate(updatedPendingUpdate);
+        
+        if (result) {
+          console.log('✅ Pending update rejected in database:', result);
+          // Remove from local pending updates since it's no longer pending
+          setPendingUpdates(prev => prev.filter(u => u.id !== updateId));
+        } else {
+          console.error('❌ Failed to update pending update status in database');
+          // Fallback: update local state
+          setPendingUpdates(prev => prev.map(u => u.id === updateId ? updatedPendingUpdate : u));
+        }
+      } catch (error) {
+        console.error('❌ Error updating pending update status:', error);
+        // Fallback: update local state
+        setPendingUpdates(prev => prev.map(u => u.id === updateId ? {
           ...u,
           status: 'rejected',
           resolvedAt: new Date().toISOString(),
           resolvedBy: currentUser.id,
-      } : u));
+        } : u));
+      }
 
-      addNotification({
+      await addNotification({
         userId: update.requestedBy,
         message: `Your requested change for ${update.type} was rejected.`,
         read: false,
         link: `${update.type}Detail/${update.itemId}`
-    });
+      });
   }, [pendingUpdates, addNotification, currentUser]);
   
   const handleAcceptProjectAssignment = (projectId: string, teammateId: string) => {
@@ -2176,6 +2542,7 @@ function App() {
         isMobileSidebarOpen={isMobileSidebarOpen}
         setIsMobileSidebarOpen={setIsMobileSidebarOpen}
         tasks={tasks}
+        pendingUpdates={pendingUpdates}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header 
