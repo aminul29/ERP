@@ -25,6 +25,8 @@ export const TeammateManagement: React.FC<TeammateManagementProps> = ({ teammate
   const [editingTeammate, setEditingTeammate] = useState<Omit<Teammate, 'id' | 'approved'> | Teammate | null>(null);
   const [isAddRoleModalOpen, setIsAddRoleModalOpen] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [teammateToDelete, setTeammateToDelete] = useState<Teammate | null>(null);
 
   const canAdd = ['HR and Admin', 'CEO'].includes(currentUser.role);
   const canDelete = ['HR and Admin', 'CEO'].includes(currentUser.role);
@@ -77,6 +79,24 @@ export const TeammateManagement: React.FC<TeammateManagementProps> = ({ teammate
     }
   };
 
+  const handleDeleteClick = (teammate: Teammate) => {
+    setTeammateToDelete(teammate);
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (teammateToDelete) {
+      onDeleteTeammate(teammateToDelete.id);
+      setTeammateToDelete(null);
+      setIsDeleteConfirmOpen(false);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setTeammateToDelete(null);
+    setIsDeleteConfirmOpen(false);
+  };
+
   const assignableRoles = roles.filter(role => role !== 'CEO');
 
   return (
@@ -127,7 +147,7 @@ export const TeammateManagement: React.FC<TeammateManagementProps> = ({ teammate
                           <button onClick={() => handleOpenModal(teammate)} className="text-yellow-400 hover:text-yellow-300" title="Edit">{ICONS.edit}</button>
                         )}
                         {teammate.approved && canDelete && teammate.role !== 'CEO' && (
-                          <button onClick={() => onDeleteTeammate(teammate.id)} className="text-red-500 hover:text-red-400" title="Delete">{ICONS.trash}</button>
+                          <button onClick={() => handleDeleteClick(teammate)} className="text-red-500 hover:text-red-400" title="Delete">{ICONS.trash}</button>
                         )}
                       </div>
                     </td>
@@ -165,7 +185,7 @@ export const TeammateManagement: React.FC<TeammateManagementProps> = ({ teammate
                     <button onClick={() => handleOpenModal(teammate)} className="text-yellow-400 hover:text-yellow-300 p-2 bg-gray-700 rounded-md" title="Edit">{ICONS.edit}</button>
                   )}
                   {teammate.approved && canDelete && teammate.role !== 'CEO' && (
-                    <button onClick={() => onDeleteTeammate(teammate.id)} className="text-red-500 hover:text-red-400 p-2 bg-gray-700 rounded-md" title="Delete">{ICONS.trash}</button>
+                    <button onClick={() => handleDeleteClick(teammate)} className="text-red-500 hover:text-red-400 p-2 bg-gray-700 rounded-md" title="Delete">{ICONS.trash}</button>
                   )}
               </div>
           </Card>
@@ -255,6 +275,49 @@ export const TeammateManagement: React.FC<TeammateManagementProps> = ({ teammate
                   <button type="submit" className="bg-primary-500 hover:bg-primary-600 text-white font-bold py-2 px-4 rounded-lg">Save Role</button>
               </div>
           </form>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal isOpen={isDeleteConfirmOpen} onClose={handleCancelDelete} title="Confirm Deletion">
+        <div className="space-y-4">
+          <div className="flex items-center space-x-3">
+            <div className="flex-shrink-0">
+              <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                Delete Teammate
+              </h3>
+              <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                {teammateToDelete && (
+                  <p>
+                    Are you sure you want to delete <span className="font-semibold text-gray-900 dark:text-white">{teammateToDelete.name}</span>? 
+                    This action cannot be undone and will permanently remove their account and all associated data.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              onClick={handleCancelDelete}
+              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmDelete}
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              Delete Teammate
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
