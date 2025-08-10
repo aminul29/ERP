@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { Client, Teammate, Project, Task, TimeLog, Salary, Notification, Attendance, TaskStatus, TaskPriority, SalaryStatus, AttendanceStatus, ErpSettings, Theme, ColorScheme, PendingUpdate, ProjectPendingUpdate, TaskPendingUpdate, TeammatePendingUpdate, Comment, ProjectAcceptanceStatus, ProjectAcceptance } from './types';
+import { Client, Teammate, Project, Task, TimeLog, Salary, Notification, Attendance, TaskStatus, TaskPriority, SalaryStatus, AttendanceStatus, ErpSettings, Theme, ColorScheme, PendingUpdate, ProjectPendingUpdate, TaskPendingUpdate, TeammatePendingUpdate, Comment, ProjectAcceptanceStatus, ProjectAcceptance, Announcement } from './types';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { Dashboard } from './components/Dashboard';
@@ -19,6 +19,8 @@ import { PerformanceEvaluation } from './components/PerformanceEvaluation';
 import { ProjectDetail } from './components/ProjectDetail';
 import { TaskDetail } from './components/TaskDetail';
 import { ToastContainer } from './components/ToastContainer';
+import { AnnouncementManagement } from './components/AnnouncementManagement';
+import { AnnouncementPopup } from './components/AnnouncementPopup';
 import { DatabaseOperations } from './lib/db-operations';
 import { loadFromDatabase, initializeDatabase } from './lib/db-service';
 import { supabase } from './lib/supabase';
@@ -146,6 +148,9 @@ function App() {
   const [pendingUpdates, setPendingUpdates] = useState<PendingUpdate[]>(() => loadState('erp_pendingUpdates', []));
   const [comments, setComments] = useState<Comment[]>(() => loadState('erp_comments', initialComments));
   const [pendingAssignments, setPendingAssignments] = useState<Project[]>([]);
+  // Announcements now loaded from database
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [announcementsLoaded, setAnnouncementsLoaded] = useState(false);
 
 
   // For testing: persist the current user's ID
@@ -315,6 +320,32 @@ function App() {
     };
     
     loadComments();
+  }, []);
+
+  // Load Announcements from database on app start
+  useEffect(() => {
+    const loadAnnouncements = async () => {
+      try {
+        const announcementsData = await loadFromDatabase.announcements();
+        console.log('📢 Loaded announcements from database:', announcementsData);
+        if (announcementsData && announcementsData.length > 0) {
+          setAnnouncements(announcementsData);
+        } else {
+          // If no announcements in database, keep empty
+          console.log('No announcements found in database, keeping empty...');
+          setAnnouncements([]);
+        }
+      } catch (error) {
+        console.error('Failed to load announcements from database:', error);
+        // On error, keep announcements empty
+        console.log('📢 Error loading announcements, keeping empty...');
+        setAnnouncements([]);
+      } finally {
+        setAnnouncementsLoaded(true);
+      }
+    };
+    
+    loadAnnouncements();
   }, []);
 
   // Real-time notifications subscription
@@ -1866,6 +1897,160 @@ function App() {
     }
   };
 
+  // Announcement Handlers
+  const handleAddAnnouncement = useCallback(async (announcement: Omit<Announcement, 'id' | 'createdAt' | 'viewedBy'>) => {
+    console.log('📢 Adding announcement:', announcement);
+    
+    if (!currentUser) {
+      console.error('❌ No current user found');
+      return;
+    }
+    
+    try {
+      // Create announcement in database
+      const createdAnnouncement = await DatabaseOperations.createAnnouncement(announcement);
+      
+      if (createdAnnouncement) {
+        console.log('✅ Announcement created successfully:', createdAnnouncement);
+        // Update local state only if database create succeeds
+        setAnnouncements(prev => [createdAnnouncement, ...prev]);
+        
+        // Send notification to current user about successful creation
+        await addNotification({
+          userId: currentUser.id,
+          message: `Announcement "${announcement.title}" was created successfully.`,
+          read: true,
+          link: 'announcements'
+        });
+      } else {
+        console.error('❌ Failed to create announcement - no data returned');
+      }
+    } catch (error) {
+      console.error('❌ Error creating announcement:', error);
+      // Could show user-friendly error message here
+    }
+  }, [currentUser, addNotification]);
+
+  const handleUpdateAnnouncement = useCallback(async (updatedAnnouncement: Announcement) => {
+    console.log('📝 Updating announcement:', updatedAnnouncement);
+    
+    try {
+      // Update announcement in database
+      const result = await DatabaseOperations.updateAnnouncement(updatedAnnouncement);
+      
+      if (result) {
+        console.log('✅ Announcement updated successfully:', result);
+        // Update local state only if database update succeeds
+        setAnnouncements(prev => prev.map(item => item.id === updatedAnnouncement.id ? result : item));
+        
+        // Send notification to current user about successful update
+        if (currentUser) {
+          await addNotification({
+            userId: currentUser.id,
+            message: `Announcement "${updatedAnnouncement.title}" was updated successfully.`,
+            read: true,
+            link: 'announcements'
+          });
+        }
+      } else {
+        console.error('❌ Failed to update announcement - no data returned');
+      }
+    } catch (error) {
+      console.error('❌ Error updating announcement:', error);
+      // Could show user-friendly error message here
+    }
+  }, [currentUser, addNotification]);
+
+  const handleDeleteAnnouncement = useCallback(async (announcementId: string) => {
+    console.log('🗑️ Deleting announcement:', announcementId);
+    
+    if (!currentUser) {
+      console.error('❌ No current user found');
+      return;
+    }
+    
+    const announcement = announcements.find(a => a.id === announcementId);
+    if (!announcement) {
+      console.error('❌ Announcement not found:', announcementId);
+      return;
+    }
+    
+    try {
+      // Delete announcement from database
+      const success = await DatabaseOperations.deleteAnnouncement(announcementId);
+      
+      if (success) {
+        console.log('✅ Announcement deleted successfully');
+        // Remove from local state only if database deletion succeeds
+        setAnnouncements(prev => prev.filter(item => item.id !== announcementId));
+        
+        // Send notification to current user about successful deletion
+        await addNotification({
+          userId: currentUser.id,
+          message: `Announcement "${announcement.title}" was deleted successfully.`,
+          read: true,
+          link: 'announcements'
+        });
+      } else {
+        console.error('❌ Failed to delete announcement - operation returned false');
+      }
+    } catch (error) {
+      console.error('❌ Error deleting announcement:', error);
+      // Could show user-friendly error message here
+    }
+  }, [currentUser, announcements, addNotification]);
+
+  const handleMarkAnnouncementAsViewed = useCallback(async (announcementId: string) => {
+    console.log('👁️ Marking announcement as viewed:', announcementId);
+    
+    if (!currentUser) {
+      console.error('❌ No current user found');
+      return;
+    }
+    
+    const announcement = announcements.find(a => a.id === announcementId);
+    if (!announcement) {
+      console.error('❌ Announcement not found:', announcementId);
+      return;
+    }
+    
+    // Check if user has already viewed this announcement
+    if (announcement.viewedBy.includes(currentUser.id)) {
+      console.log('✅ User has already viewed this announcement');
+      return;
+    }
+    
+    try {
+      // Add current user to viewedBy array
+      const updatedAnnouncement = {
+        ...announcement,
+        viewedBy: [...announcement.viewedBy, currentUser.id]
+      };
+      
+      // Update announcement in database
+      const result = await DatabaseOperations.updateAnnouncement(updatedAnnouncement);
+      
+      if (result) {
+        console.log('✅ Announcement marked as viewed successfully:', result);
+        // Update local state only if database update succeeds
+        setAnnouncements(prev => prev.map(item => 
+          item.id === announcementId ? result : item
+        ));
+      } else {
+        console.error('❌ Failed to mark announcement as viewed - no data returned');
+      }
+    } catch (error) {
+      console.error('❌ Error marking announcement as viewed:', error);
+      // Fallback: update local state if database fails
+      setAnnouncements(prev => prev.map(item => 
+        item.id === announcementId ? {
+          ...item,
+          viewedBy: [...item.viewedBy, currentUser.id]
+        } : item
+      ));
+    }
+  }, [currentUser, announcements]);
+
   const renderContent = (currentUser: Teammate) => {
     const [view, id] = activeView.split('/');
     switch (view) {
@@ -1913,6 +2098,15 @@ function App() {
         return <ApprovalManagement pendingUpdates={pendingUpdates.filter(u => u.status === 'pending')} projects={projects} tasks={tasks} teammates={teammates} onApprove={handleApproveUpdate} onReject={handleRejectUpdate} />;
       case 'performance':
         return <PerformanceEvaluation teammates={approvedTeammates} tasks={tasks} />;
+      case 'announcements':
+        return <AnnouncementManagement 
+          announcements={announcements}
+          currentUser={currentUser}
+          teammates={teammates}
+          onAddAnnouncement={handleAddAnnouncement}
+          onUpdateAnnouncement={handleUpdateAnnouncement}
+          onDeleteAnnouncement={handleDeleteAnnouncement}
+        />;
       case 'projectDetail': {
         const project = projects.find(p => p.id === id);
         if (!project) return <div className="p-6 text-white">Project not found</div>;
@@ -2006,6 +2200,11 @@ function App() {
             currentUser={currentUser}
             onAccept={handleAcceptProjectAssignment}
             onExpire={handleExpireProjectAssignment}
+        />
+        <AnnouncementPopup
+          announcements={announcements}
+          currentUser={currentUser}
+          onMarkAsViewed={handleMarkAnnouncementAsViewed}
         />
     </div>
   );

@@ -1,7 +1,7 @@
 import { supabase, TABLES } from './supabase';
 import {
   Teammate, Client, Project, Task, TimeLog, Salary,
-  Notification, Attendance, Comment, PendingUpdate, ErpSettings
+  Notification, Attendance, Comment, PendingUpdate, ErpSettings, Announcement
 } from '../types';
 
 // Data loading functions that will replace localStorage
@@ -260,6 +260,34 @@ export const loadFromDatabase = {
       } as PendingUpdate));
     } catch (error) {
       console.error('Error loading pending updates:', error);
+      return [];
+    }
+  },
+
+  async announcements(): Promise<Announcement[]> {
+    try {
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        title: row.title,
+        content: row.content,
+        priority: row.priority,
+        targetAudience: row.target_audience,
+        targetRoles: row.target_roles || [],
+        createdBy: row.created_by,
+        createdAt: row.created_at,
+        expiresAt: row.expires_at,
+        isActive: row.is_active,
+        viewedBy: row.viewed_by || []
+      }));
+    } catch (error) {
+      console.error('Error loading announcements:', error);
       return [];
     }
   },

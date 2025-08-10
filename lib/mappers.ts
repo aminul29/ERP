@@ -1,6 +1,6 @@
 import { 
   Teammate, Client, Project, Task, TimeLog, Salary, 
-  Notification, Attendance, Comment, PendingUpdate, ErpSettings 
+  Notification, Attendance, Comment, PendingUpdate, ErpSettings, Announcement 
 } from '../types';
 
 // Map database row to Teammate interface
@@ -130,6 +130,21 @@ export const mapPendingUpdate = (row: any): PendingUpdate => ({
   resolvedAt: row.resolved_at,
   resolvedBy: row.resolved_by
 } as PendingUpdate);
+
+// Map database row to Announcement interface
+export const mapAnnouncement = (row: any): Announcement => ({
+  id: row.id,
+  title: row.title,
+  content: row.content,
+  priority: row.priority,
+  targetAudience: row.target_audience,
+  targetRoles: row.target_roles || [],
+  createdBy: row.created_by,
+  createdAt: row.created_at,
+  expiresAt: row.expires_at,
+  isActive: row.is_active,
+  viewedBy: row.viewed_by || []
+});
 
 // Map database row to ErpSettings interface
 export const mapErpSettings = (row: any): ErpSettings => ({

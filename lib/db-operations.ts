@@ -3,12 +3,12 @@
 
 import { 
   Client, Teammate, Project, Task, TimeLog, Salary, Notification, 
-  Attendance, ErpSettings, Comment, PendingUpdate 
+  Attendance, ErpSettings, Comment, PendingUpdate, Announcement 
 } from '../types';
 import { supabase } from './supabase';
 import { mapTeammate, mapClient, mapProject, mapTask, 
          mapTimeLog, mapSalary, mapNotification, mapAttendance, 
-         mapComment, mapPendingUpdate } from './mappers';
+         mapComment, mapPendingUpdate, mapAnnouncement } from './mappers';
 
 export class DatabaseOperations {
   // TEAMMATES OPERATIONS
@@ -625,6 +625,130 @@ export class DatabaseOperations {
       return mapPendingUpdate(data);
     } catch (error) {
       console.error('Error updating pending update:', error);
+      return null;
+    }
+  }
+
+  // ANNOUNCEMENTS OPERATIONS
+  static async createAnnouncement(announcement: Omit<Announcement, 'id' | 'createdAt' | 'viewedBy'>): Promise<Announcement | null> {
+    try {
+      console.log('📝 Creating announcement with data:', announcement);
+      
+      const insertData = {
+        title: announcement.title,
+        content: announcement.content,
+        priority: announcement.priority,
+        target_audience: announcement.targetAudience,
+        target_roles: announcement.targetRoles || [],
+        created_by: announcement.createdBy,
+        expires_at: announcement.expiresAt || null,
+        is_active: announcement.isActive,
+        viewed_by: [] // Start with empty array
+      };
+      
+      console.log('📤 Sending announcement to database:', insertData);
+      
+      const { data, error } = await supabase
+        .from('announcements')
+        .insert([insertData])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('❌ Database error:', error);
+        throw error;
+      }
+      
+      console.log('✅ Announcement database response:', data);
+      const mappedData = mapAnnouncement(data);
+      console.log('🗺️ Mapped announcement:', mappedData);
+      
+      return mappedData;
+    } catch (error) {
+      console.error('Error creating announcement:', error);
+      return null;
+    }
+  }
+
+  static async updateAnnouncement(announcement: Announcement): Promise<Announcement | null> {
+    try {
+      const { data, error } = await supabase
+        .from('announcements')
+        .update({
+          title: announcement.title,
+          content: announcement.content,
+          priority: announcement.priority,
+          target_audience: announcement.targetAudience,
+          target_roles: announcement.targetRoles || [],
+          expires_at: announcement.expiresAt || null,
+          is_active: announcement.isActive,
+          viewed_by: announcement.viewedBy
+        })
+        .eq('id', announcement.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return mapAnnouncement(data);
+    } catch (error) {
+      console.error('Error updating announcement:', error);
+      return null;
+    }
+  }
+
+  static async deleteAnnouncement(announcementId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('announcements')
+        .delete()
+        .eq('id', announcementId);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error deleting announcement:', error);
+      return false;
+    }
+  }
+
+  static async markAnnouncementAsViewed(announcementId: string, userId: string): Promise<Announcement | null> {
+    try {
+      // First get the current announcement
+      const { data: currentAnnouncement, error: fetchError } = await supabase
+        .from('announcements')
+        .select('viewed_by')
+        .eq('id', announcementId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Add user to viewed_by array if not already present
+      const viewedBy = currentAnnouncement.viewed_by || [];
+      if (!viewedBy.includes(userId)) {
+        viewedBy.push(userId);
+
+        const { data, error } = await supabase
+          .from('announcements')
+          .update({ viewed_by: viewedBy })
+          .eq('id', announcementId)
+          .select()
+          .single();
+
+        if (error) throw error;
+        return mapAnnouncement(data);
+      }
+
+      // Return current data if user already viewed
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .eq('id', announcementId)
+        .single();
+
+      if (error) throw error;
+      return mapAnnouncement(data);
+    } catch (error) {
+      console.error('Error marking announcement as viewed:', error);
       return null;
     }
   }

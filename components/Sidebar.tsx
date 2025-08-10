@@ -24,6 +24,7 @@ const navItems = [
   { id: 'teammates', label: 'Teammates', icon: ICONS.teammates, allowedRoles: ['HR and Admin'] },
   { id: 'clients', label: 'Clients', icon: ICONS.clients, allowedRoles: ['Sales and PR Lead'] },
   { id: 'salary', label: 'Salaries', icon: ICONS.salary, allowedRoles: ['HR and Admin'] },
+  { id: 'announcements', label: 'Announcements', icon: ICONS.announcements, allowedRoles: ['CEO', 'HR and Admin'] },
   { id: 'approvals', label: 'Approvals', icon: ICONS.approvals, allowedRoles: ['CEO'] },
   { id: 'settings', label: 'ERP Settings', icon: ICONS.settings, allowedRoles: ['CEO'] },
 ];

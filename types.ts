@@ -46,6 +46,20 @@ export enum ProjectAcceptanceStatus {
     Expired = 'expired',
 }
 
+export enum AnnouncementPriority {
+    Low = 'low',
+    Medium = 'medium',
+    High = 'high',
+    Urgent = 'urgent',
+}
+
+export enum AnnouncementTargetAudience {
+    All = 'all',
+    Management = 'management',
+    Staff = 'staff',
+    Specific = 'specific',
+}
+
 export interface ErpSettings {
     companyName: string;
     dailyTimeGoal: number;
@@ -170,6 +184,20 @@ export interface Comment {
     timestamp: string;
     historyItemType?: 'comment';
     readBy?: string[]; // Array of user IDs who have read this comment
+}
+
+export interface Announcement {
+    id: string;
+    title: string;
+    content: string;
+    priority: AnnouncementPriority;
+    targetAudience: AnnouncementTargetAudience;
+    targetRoles?: string[]; // Specific roles if targetAudience is 'specific'
+    createdBy: string; // Teammate ID
+    createdAt: string; // ISO timestamp
+    expiresAt?: string; // ISO timestamp
+    isActive: boolean;
+    viewedBy: string[]; // Array of user IDs who have viewed this announcement
 }
 
 export type ProjectPendingUpdate = {
