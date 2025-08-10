@@ -79,6 +79,7 @@ interface TaskManagementProps {
   onUpdateTask: (task: Task) => void; // For direct updates like timer/status
   onDeleteTask: (taskId: string) => void;
   onRateTask: (taskId: string, rating: number, rater: 'assigner' | 'ceo') => void;
+  onArchiveTask: (taskId: string, archived: boolean) => void; // Add archive handler prop
   clients: Client[];
   divisions: string[];
   pendingUpdates: PendingUpdate[];
@@ -112,7 +113,7 @@ const priorityColors: { [key in TaskPriority]: 'green' | 'yellow' | 'red' } = {
   [TaskPriority.High]: 'red',
 };
 
-export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects, teammates, currentUser, onAddTask, onEditTask, onUpdateTask, onDeleteTask, onRateTask, clients, divisions, pendingUpdates, onNavClick, comments }) => {
+export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects, teammates, currentUser, onAddTask, onEditTask, onUpdateTask, onDeleteTask, onRateTask, onArchiveTask, clients, divisions, pendingUpdates, onNavClick, comments }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -149,6 +150,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
   const [filterStatus, setFilterStatus] = useState<TaskStatus | 'all'>('all');
   const [filterPriority, setFilterPriority] = useState<TaskPriority | 'all'>('all');
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
+  const [showArchived, setShowArchived] = useState<boolean>(false); // Add archive filter
   const [sortBy, setSortBy] = useState<'deadline' | 'priority' | 'status' | 'title'>('deadline');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [searchTerm, setSearchTerm] = useState('');
@@ -188,7 +190,24 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
 
   // Filtered and Sorted Tasks
   const filteredAndSortedTasks = useMemo(() => {
+    console.log('🔍 Filtering tasks:', {
+      totalTasks: tasks.length,
+      showArchived,
+      archivedTasks: tasks.filter(t => t.archived === true).length,
+      activeTasks: tasks.filter(t => !t.archived).length
+    });
+    
     let filtered = tasks.filter(task => isManager || task.assignedToId === currentUser.id);
+    console.log('👥 After permission filter:', filtered.length);
+    
+    // Apply archive filter - by default hide archived tasks unless showArchived is true
+    // Handle null/undefined archived values by treating them as false
+    filtered = filtered.filter(task => {
+      const isArchived = task.archived === true;
+      const shouldShow = showArchived ? isArchived : !isArchived;
+      return shouldShow;
+    });
+    console.log(`📦 After archive filter (showArchived: ${showArchived}):`, filtered.length);
     
     // Apply search filter
     if (searchTerm.trim()) {
@@ -198,6 +217,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
         projects.find(p => p.id === task.projectId)?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         teammates.find(t => t.id === task.assignedToId)?.name.toLowerCase().includes(searchTerm.toLowerCase())
       );
+      console.log('🔎 After search filter:', filtered.length);
     }
     
     // Apply status filter
@@ -267,7 +287,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
     });
     
     return filtered;
-  }, [tasks, currentUser, isManager, searchTerm, filterStatus, filterPriority, filterAssignee, sortBy, sortOrder, projects, teammates]);
+  }, [tasks, currentUser, isManager, searchTerm, filterStatus, filterPriority, filterAssignee, showArchived, sortBy, sortOrder, projects, teammates]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -534,6 +554,36 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                 ))}
               </select>
             )}
+            
+            {/* Archive Toggle */}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => {
+                  const newState = !showArchived;
+                  console.log('🔄 Archive toggle clicked:', { from: showArchived, to: newState });
+                  setShowArchived(newState);
+                }}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  showArchived
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-gray-700 border border-gray-600 text-gray-300 hover:text-white hover:bg-gray-600'
+                }`}
+                title={showArchived ? 'Showing archived tasks' : 'Showing active tasks'}
+              >
+                <div className="flex items-center space-x-2">
+                  <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                    {showArchived ? (
+                      // Archive box icon (for when showing archived)
+                      <path d="M4 3a2 2 0 00-2 2v1.816a2 2 0 00.586 1.414l.812.812A2 2 0 004.812 9H15a2 2 0 001.414-.586l.812-.812A2 2 0 0018 6.586V5a2 2 0 00-2-2H4zm3 8a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm0 3a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z"/>
+                    ) : (
+                      // Inbox/active icon (for when showing active)
+                      <path fillRule="evenodd" d="M2 3a1 1 0 00-1 1v12a1 1 0 001 1h16a1 1 0 001-1V4a1 1 0 00-1-1H2zm2 2h12v10H4V5zm2 4a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1z" clipRule="evenodd"/>
+                    )}
+                  </svg>
+                  <span>{showArchived ? 'Archived' : 'Active'}</span>
+                </div>
+              </button>
+            </div>
           </div>
           
           {/* Sort Controls */}
@@ -680,6 +730,27 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                                     )}
                                 </>
                             )}
+                            
+                            {/* Archive/Unarchive buttons - only for completed tasks */}
+                            {(task.status === TaskStatus.Done || task.status === TaskStatus.Completed) && (
+                                <button 
+                                    onClick={() => onArchiveTask(task.id, !task.archived)}
+                                    className={`hover:scale-110 transition-transform ${
+                                        task.archived ? 'text-blue-400 hover:text-blue-300' : 'text-gray-400 hover:text-gray-300'
+                                    }`}
+                                    title={task.archived ? 'Unarchive task' : 'Archive task'}
+                                >
+                                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                        {task.archived ? (
+                                            // Unarchive icon (box with arrow up)
+                                            <path d="M4 3a2 2 0 00-2 2v1.816a2 2 0 00.586 1.414l.812.812A2 2 0 004.812 9H15a2 2 0 001.414-.586l.812-.812A2 2 0 0018 6.586V5a2 2 0 00-2-2H4zm6 6a1 1 0 00-1 1v3a1 1 0 102 0v-3a1 1 0 00-1-1zm-3 2a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z"/>
+                                        ) : (
+                                            // Archive icon (box with arrow down)
+                                            <path d="M4 3a2 2 0 00-2 2v1.816a2 2 0 00.586 1.414l.812.812A2 2 0 004.812 9H15a2 2 0 001.414-.586l.812-.812A2 2 0 0018 6.586V5a2 2 0 00-2-2H4zm3 8a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm0 3a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z"/>
+                                        )}
+                                    </svg>
+                                </button>
+                            )}
                         </div>
                       </td>
                     </tr>
@@ -775,6 +846,27 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                               )}
                           </>
                       )}
+                      
+                      {/* Archive/Unarchive buttons - only for completed tasks */}
+                      {(task.status === TaskStatus.Done || task.status === TaskStatus.Completed) && (
+                          <button 
+                              onClick={() => onArchiveTask(task.id, !task.archived)}
+                              className={`hover:scale-110 transition-transform ${
+                                  task.archived ? 'text-blue-400 hover:text-blue-300' : 'text-gray-400 hover:text-gray-300'
+                              }`}
+                              title={task.archived ? 'Unarchive task' : 'Archive task'}
+                          >
+                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                  {task.archived ? (
+                                      // Unarchive icon (box with arrow up)
+                                      <path d="M4 3a2 2 0 00-2 2v1.816a2 2 0 00.586 1.414l.812.812A2 2 0 004.812 9H15a2 2 0 001.414-.586l.812-.812A2 2 0 0018 6.586V5a2 2 0 00-2-2H4zm6 6a1 1 0 00-1 1v3a1 1 0 102 0v-3a1 1 0 00-1-1zm-3 2a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z"/>
+                                  ) : (
+                                      // Archive icon (box with arrow down)
+                                      <path d="M4 3a2 2 0 00-2 2v1.816a2 2 0 00.586 1.414l.812.812A2 2 0 004.812 9H15a2 2 0 001.414-.586l.812-.812A2 2 0 0018 6.586V5a2 2 0 00-2-2H4zm3 8a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm0 3a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z"/>
+                                  )}
+                              </svg>
+                          </button>
+                      )}
                   </div>
                 </Card>
               )
@@ -866,6 +958,27 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                               </button>
                           )}
                       </>
+                  )}
+                  
+                  {/* Archive/Unarchive buttons - only for completed tasks */}
+                  {(task.status === TaskStatus.Done || task.status === TaskStatus.Completed) && (
+                      <button 
+                          onClick={() => onArchiveTask(task.id, !task.archived)}
+                          className={`hover:scale-110 transition-transform ${
+                              task.archived ? 'text-blue-400 hover:text-blue-300' : 'text-gray-400 hover:text-gray-300'
+                          }`}
+                          title={task.archived ? 'Unarchive task' : 'Archive task'}
+                      >
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                              {task.archived ? (
+                                  // Unarchive icon (box with arrow up)
+                                  <path d="M4 3a2 2 0 00-2 2v1.816a2 2 0 00.586 1.414l.812.812A2 2 0 004.812 9H15a2 2 0 001.414-.586l.812-.812A2 2 0 0018 6.586V5a2 2 0 00-2-2H4zm6 6a1 1 0 00-1 1v3a1 1 0 102 0v-3a1 1 0 00-1-1zm-3 2a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z"/>
+                              ) : (
+                                  // Archive icon (box with arrow down)
+                                  <path d="M4 3a2 2 0 00-2 2v1.816a2 2 0 00.586 1.414l.812.812A2 2 0 004.812 9H15a2 2 0 001.414-.586l.812-.812A2 2 0 0018 6.586V5a2 2 0 00-2-2H4zm3 8a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm0 3a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z"/>
+                              )}
+                          </svg>
+                      </button>
                   )}
               </div>
             </Card>

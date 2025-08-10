@@ -273,30 +273,43 @@ export class DatabaseOperations {
 
   static async updateTask(task: Task): Promise<Task | null> {
     try {
+      const updateData: any = {
+        title: task.title,
+        description: task.description,
+        project_id: task.projectId || null,
+        client_id: task.clientId || null,
+        divisions: task.divisions,
+        assigned_to_id: task.assignedToId,
+        assigned_by_id: task.assignedById,
+        status: task.status,
+        deadline: task.deadline,
+        priority: task.priority,
+        completion_report: task.completionReport,
+        work_experience: task.workExperience,
+        suggestions: task.suggestions,
+        completion_files: task.completionFiles || [],
+        drive_link: task.driveLink,
+        allocated_time_in_seconds: task.allocatedTimeInSeconds,
+        time_spent_seconds: Math.round(task.timeSpentSeconds || 0),
+        timer_start_time: task.timerStartTime ?? null,
+        revision_note: task.revisionNote,
+        ratings: task.ratings || {}
+      };
+      
+      // Handle archive-related fields
+      if (task.archived !== undefined) {
+        updateData.archived = task.archived;
+      }
+      if (task.archivedAt !== undefined) {
+        updateData.archived_at = task.archivedAt;
+      }
+      if (task.completedAt !== undefined) {
+        updateData.completed_at = task.completedAt;
+      }
+      
       const { data, error } = await supabase
         .from('tasks')
-        .update({
-          title: task.title,
-          description: task.description,
-          project_id: task.projectId || null,
-          client_id: task.clientId || null,
-          divisions: task.divisions,
-          assigned_to_id: task.assignedToId,
-          assigned_by_id: task.assignedById,
-          status: task.status,
-          deadline: task.deadline,
-          priority: task.priority,
-          completion_report: task.completionReport,
-          work_experience: task.workExperience,
-          suggestions: task.suggestions,
-          completion_files: task.completionFiles || [],
-          drive_link: task.driveLink,
-          allocated_time_in_seconds: task.allocatedTimeInSeconds,
-          time_spent_seconds: Math.round(task.timeSpentSeconds || 0),
-          timer_start_time: task.timerStartTime ?? null,
-          revision_note: task.revisionNote,
-          ratings: task.ratings || {}
-        })
+        .update(updateData)
         .eq('id', task.id)
         .select()
         .single();

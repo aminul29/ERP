@@ -140,6 +140,10 @@ export interface Task {
     assigner?: number;
     ceo?: number;
   };
+  // Archive-related fields
+  archived?: boolean;
+  archivedAt?: string; // ISO timestamp when task was archived
+  completedAt?: string; // ISO timestamp when task was marked as completed
 }
 
 export interface TimeLog {

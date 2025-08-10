@@ -90,6 +90,7 @@ export const loadFromDatabase = {
       const { data, error } = await supabase
         .from(TABLES.TASKS)
         .select('*')
+        .eq('archived', false)  // Only load non-archived tasks
         .order('created_at', { ascending: false });
       
       if (error) throw error;
@@ -114,7 +115,11 @@ export const loadFromDatabase = {
         timeSpentSeconds: row.time_spent_seconds,
         timerStartTime: row.timer_start_time,
         revisionNote: row.revision_note,
-        ratings: row.ratings || {}
+        ratings: row.ratings || {},
+        // Archive fields
+        archived: row.archived || false,
+        archivedAt: row.archived_at,
+        completedAt: row.completed_at
       }));
     } catch (error) {
       console.error('Error loading tasks:', error);

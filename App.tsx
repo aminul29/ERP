@@ -24,7 +24,9 @@ import { AnnouncementPopup } from './components/AnnouncementPopup';
 import { DatabaseOperations } from './lib/db-operations';
 import { loadFromDatabase, initializeDatabase } from './lib/db-service';
 import { supabase } from './lib/supabase';
+import { mapTask } from './lib/mappers';
 import { COLOR_PALETTES, CHART_COLORS } from './constants';
+import { useAutoArchive } from './hooks/useAutoArchive';
 
 // --- SEED DATA (used as fallback) ---
 const initialTeammates: Teammate[] = [
@@ -157,6 +159,9 @@ function App() {
   // For testing: persist the current user's ID
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => loadState('erp_currentUserId', null));
   const currentUser = useMemo(() => teammates.find(t => t.id === currentUserId) || null, [currentUserId, teammates]);
+
+  // Auto-archive completed tasks (runs once daily when app starts)
+  const { isArchiving, lastArchiveRun } = useAutoArchive();
 
   // Initialize database and load ERP Settings on app start
   useEffect(() => {
@@ -520,29 +525,8 @@ function App() {
             const updatedTaskData = payload.new;
             console.log('🔄 Task updated:', updatedTaskData);
             
-            const updatedTask: Task = {
-              id: updatedTaskData.id,
-              title: updatedTaskData.title,
-              description: updatedTaskData.description,
-              projectId: updatedTaskData.project_id,
-              clientId: updatedTaskData.client_id,
-              divisions: updatedTaskData.divisions,
-              assignedToId: updatedTaskData.assigned_to_id,
-              assignedById: updatedTaskData.assigned_by_id,
-              status: updatedTaskData.status,
-              deadline: updatedTaskData.deadline,
-              priority: updatedTaskData.priority,
-              completionReport: updatedTaskData.completion_report,
-              workExperience: updatedTaskData.work_experience,
-              suggestions: updatedTaskData.suggestions,
-              completionFiles: updatedTaskData.completion_files,
-              driveLink: updatedTaskData.drive_link,
-              allocatedTimeInSeconds: updatedTaskData.allocated_time_in_seconds,
-              timeSpentSeconds: updatedTaskData.time_spent_seconds,
-              timerStartTime: updatedTaskData.timer_start_time,
-              revisionNote: updatedTaskData.revision_note,
-              ratings: updatedTaskData.ratings || {}
-            };
+            // Use the mapTask function to ensure consistent mapping
+            const updatedTask: Task = mapTask(updatedTaskData);
             
             setTasks(prev => prev.map(t => 
               t.id === updatedTask.id ? updatedTask : t
@@ -1763,6 +1747,72 @@ function App() {
     }
   }, [currentUser, tasks, teammates, addNotification]);
 
+  const handleArchiveTask = useCallback(async (taskId: string, archived: boolean) => {
+    console.log('🚀 handleArchiveTask called:', { taskId, archived });
+    console.log(archived ? '📦 Archiving task:' : '📤 Unarchiving task:', taskId);
+    
+    if (!currentUser) {
+      console.error('❌ No current user found');
+      return;
+    }
+    
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) {
+      console.error('❌ Task not found:', taskId);
+      return;
+    }
+    
+    console.log('📋 Task found:', { title: task.title, status: task.status, archived: task.archived });
+    
+    // Only completed tasks can be archived
+    if (archived && task.status !== TaskStatus.Done && task.status !== TaskStatus.Completed) {
+      console.error('❌ Only completed tasks can be archived', { status: task.status });
+      return;
+    }
+    
+    // Update task with new archived status
+    const updatedTask = {
+      ...task,
+      archived: archived,
+      archivedAt: archived ? new Date().toISOString() : undefined,
+      archivedBy: archived ? currentUser.id : undefined
+    };
+    
+    try {
+      // Update task in database
+      const result = await DatabaseOperations.updateTask(updatedTask);
+      
+      if (result) {
+        console.log(`✅ Task ${archived ? 'archived' : 'unarchived'} successfully:`, result);
+        // Update local state only if database update succeeds
+        setTasks(prev => prev.map(t => t.id === taskId ? result : t));
+        
+        // Send notification to current user
+        await addNotification({
+          userId: currentUser.id,
+          message: `Task "${task.title}" was ${archived ? 'archived' : 'unarchived'} successfully.`,
+          read: true,
+          link: `taskDetail/${taskId}`
+        });
+        
+        // If archiving, notify the task assignee (if different from current user)
+        if (archived && task.assignedToId !== currentUser.id) {
+          await addNotification({
+            userId: task.assignedToId,
+            message: `Your completed task "${task.title}" has been archived.`,
+            read: false,
+            link: `taskDetail/${taskId}`
+          });
+        }
+      } else {
+        console.error(`❌ Failed to ${archived ? 'archive' : 'unarchive'} task - no data returned`);
+      }
+    } catch (error) {
+      console.error(`❌ Error ${archived ? 'archiving' : 'unarchiving'} task:`, error);
+      // Could show user-friendly error message here
+    }
+  }, [currentUser, tasks, addNotification]);
+
   // Task Review and Approval Handlers
   const handleApproveTask = useCallback(async (taskId: string) => {
     console.log('✅ Approving task:', taskId);
@@ -2448,7 +2498,7 @@ function App() {
       case 'projects':
         return <ProjectManagement projects={projects} tasks={tasks} clients={clients} teammates={approvedTeammates} onAddProject={handleAddProject} onUpdateProject={handleUpdateProject} onRateProject={handleRateProject} currentUser={currentUser} pendingUpdates={pendingUpdates.filter(u=>u.status === 'pending')} onNavClick={handleNavClick} divisions={erpSettings.divisions} onAddClient={handleAddClient} />;
       case 'tasks':
-        return <TaskManagement tasks={tasks} projects={projects} teammates={approvedTeammates} currentUser={currentUser} onAddTask={handleAddTask} onEditTask={handleEditTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onRateTask={handleRateTask} clients={clients} divisions={erpSettings.divisions} pendingUpdates={pendingUpdates.filter(u=>u.status === 'pending')} onNavClick={handleNavClick} comments={comments} />;
+        return <TaskManagement tasks={tasks} projects={projects} teammates={approvedTeammates} currentUser={currentUser} onAddTask={handleAddTask} onEditTask={handleEditTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onRateTask={handleRateTask} onArchiveTask={handleArchiveTask} clients={clients} divisions={erpSettings.divisions} pendingUpdates={pendingUpdates.filter(u=>u.status === 'pending')} onNavClick={handleNavClick} comments={comments} />;
       case 'time':
         return <TimeTracking timeLogs={timeLogs} teammates={approvedTeammates} currentUser={currentUser} onLogTime={handleLogTime} dailyTimeGoal={erpSettings.dailyTimeGoal} />;
       case 'salary':

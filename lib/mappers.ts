@@ -44,29 +44,47 @@ export const mapProject = (row: any): Project => ({
 });
 
 // Map database row to Task interface
-export const mapTask = (row: any): Task => ({
-  id: row.id,
-  title: row.title,
-  description: row.description,
-  status: row.status,
-  deadline: row.deadline,
-  priority: row.priority,
-  projectId: row.project_id,
-  clientId: row.client_id,
-  divisions: row.divisions || [],
-  assignedToId: row.assigned_to_id,
-  assignedById: row.assigned_by_id,
-  completionReport: row.completion_report,
-  workExperience: row.work_experience,
-  suggestions: row.suggestions,
-  completionFiles: row.completion_files || [],
-  driveLink: row.drive_link,
-allocatedTimeInSeconds: row.allocated_time_in_seconds,
-  timeSpentSeconds: row.time_spent_seconds,
-  timerStartTime: row.timer_start_time,
-  revisionNote: row.revision_note,
-  ratings: row.ratings || {}
-});
+export const mapTask = (row: any): Task => {
+  // Debug archive field mapping
+  const archived = Boolean(row.archived);
+  if (row.id && (row.archived !== undefined || row.archived_at)) {
+    console.log('📋 MapTask archive fields:', {
+      id: row.id,
+      title: row.title,
+      raw_archived: row.archived,
+      mapped_archived: archived,
+      archived_at: row.archived_at
+    });
+  }
+
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    status: row.status,
+    deadline: row.deadline,
+    priority: row.priority,
+    projectId: row.project_id,
+    clientId: row.client_id,
+    divisions: row.divisions || [],
+    assignedToId: row.assigned_to_id,
+    assignedById: row.assigned_by_id,
+    completionReport: row.completion_report,
+    workExperience: row.work_experience,
+    suggestions: row.suggestions,
+    completionFiles: row.completion_files || [],
+    driveLink: row.drive_link,
+    allocatedTimeInSeconds: row.allocated_time_in_seconds,
+    timeSpentSeconds: row.time_spent_seconds,
+    timerStartTime: row.timer_start_time,
+    revisionNote: row.revision_note,
+    ratings: row.ratings || {},
+    // Archive fields
+    archived: archived,
+    archivedAt: row.archived_at,
+    completedAt: row.completed_at
+  };
+};
 
 // Map database row to TimeLog interface
 export const mapTimeLog = (row: any): TimeLog => ({
