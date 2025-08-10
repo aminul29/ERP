@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ICONS } from '../constants';
-import { Teammate } from '../types';
+import { Teammate, Task } from '../types';
 
 interface SidebarProps {
   activeView: string;
@@ -10,6 +10,7 @@ interface SidebarProps {
   currentUser: Teammate;
   isMobileSidebarOpen: boolean;
   setIsMobileSidebarOpen: (isOpen: boolean) => void;
+  tasks: Task[];
 }
 
 const navItems = [
@@ -27,11 +28,18 @@ const navItems = [
   { id: 'settings', label: 'ERP Settings', icon: ICONS.settings, allowedRoles: ['CEO'] },
 ];
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavClick, currentUser, isMobileSidebarOpen, setIsMobileSidebarOpen }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavClick, currentUser, isMobileSidebarOpen, setIsMobileSidebarOpen, tasks }) => {
   const handleItemClick = (view: string) => {
     onNavClick(view);
     setIsMobileSidebarOpen(false);
   };
+  
+  // Calculate assigned tasks count for current user (excluding Done/Completed)
+  const assignedTasksCount = tasks.filter(t => 
+    t.assignedToId === currentUser.id && 
+    t.status !== 'Done' && 
+    t.status !== 'Completed'
+  ).length;
   
   return (
     <>
@@ -54,14 +62,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavClick, curren
               <button
                 key={item.id}
                 onClick={() => handleItemClick(item.id)}
-                className={`flex items-center space-x-3 p-2 rounded-lg text-left transition-colors duration-200 ${
+                className={`flex items-center justify-between p-2 rounded-lg text-left transition-colors duration-200 ${
                   isActive
                     ? 'bg-primary-500 text-white'
                     : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'
                 }`}
               >
-                <span className="w-6 h-6">{item.icon}</span>
-                <span>{item.label}</span>
+                <div className="flex items-center space-x-3">
+                  <span className="w-6 h-6">{item.icon}</span>
+                  <span>{item.label}</span>
+                </div>
+                {item.id === 'tasks' && assignedTasksCount > 0 && (
+                  <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-red-100 bg-red-600 rounded-full">
+                    {assignedTasksCount}
+                  </span>
+                )}
               </button>
             );
           })}

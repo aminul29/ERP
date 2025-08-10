@@ -1982,6 +1982,7 @@ function App() {
         currentUser={currentUser}
         isMobileSidebarOpen={isMobileSidebarOpen}
         setIsMobileSidebarOpen={setIsMobileSidebarOpen}
+        tasks={tasks}
       />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header 
