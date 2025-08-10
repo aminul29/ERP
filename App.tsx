@@ -1707,10 +1707,9 @@ function App() {
       return;
     }
     
-    // Check if current user is the author or has admin privileges
+    // Check if current user is the author or CEO
     const canDelete = commentToDelete.authorId === currentUser.id || 
-                     currentUser.role === 'CEO' || 
-                     ['HR and Admin', 'Lead Web Developer', 'SMM and Design Lead', 'Sales and PR Lead', 'Lead SEO Expert'].includes(currentUser.role);
+                     currentUser.role === 'CEO';
     
     if (!canDelete) {
       console.error('❌ User does not have permission to delete this comment');
