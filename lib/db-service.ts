@@ -90,7 +90,6 @@ export const loadFromDatabase = {
       const { data, error } = await supabase
         .from(TABLES.TASKS)
         .select('*')
-        .eq('archived', false)  // Only load non-archived tasks
         .order('created_at', { ascending: false });
       
       if (error) throw error;
