@@ -115,6 +115,7 @@ export const loadFromDatabase = {
         timerStartTime: row.timer_start_time,
         revisionNote: row.revision_note,
         ratings: row.ratings || {},
+        driveLink: row.drive_link,
         // Archive fields
         archived: row.archived || false,
         archivedAt: row.archived_at,
