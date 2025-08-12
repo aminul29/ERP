@@ -693,7 +693,7 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, a
                             )}
                             {task.driveLink && (
                               <div>
-                                <p className="text-sm text-gray-400 mb-1">Google Drive Link</p>
+                                <p className="text-sm text-gray-400 mb-1">Completed Task Link</p>
                                 <a 
                                   href={task.driveLink}
                                   target="_blank"
@@ -876,15 +876,15 @@ export const TaskDetail: React.FC<TaskDetailProps> = ({ task, project, client, a
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">Google Drive Link</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Completed Task Link</label>
                   <input 
                       type="url"
                       value={driveLink}
                       onChange={e => setDriveLink(e.target.value)}
-                      placeholder="https://drive.google.com/file/d/..." 
+                      placeholder="https://example.com/file/d/..." 
                       className="w-full p-2 bg-gray-700 rounded border border-gray-600" 
                   />
-                  <p className="text-xs text-gray-500 mt-1">Paste a Google Drive URL to your files or folder</p>
+                  <p className="text-xs text-gray-500 mt-1">Paste a URL to your files or folder</p>
                 </div>
 
                 <div className="flex justify-end pt-4">

@@ -409,7 +409,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
       }
   };
 
-  const handleMarkAsDone = (task: Task) => {
+  const handleMarkAsCompleted = (task: Task) => {
     let taskToReport = { ...task };
     if (task.timerStartTime) {
         const elapsedSeconds = Math.round((new Date().getTime() - new Date(task.timerStartTime).getTime()) / 1000);
@@ -711,10 +711,10 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                                 {task.status === TaskStatus.InProgress && !task.timerStartTime && (
                                 <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded">Resume</button>
                                 )}
-                                <button onClick={() => handleMarkAsDone(task)} className="bg-primary-500 hover:bg-primary-600 text-white text-xs font-bold py-1 px-3 rounded">Done</button>
+                                <button onClick={() => handleMarkAsCompleted(task)} className="bg-primary-500 hover:bg-primary-600 text-white text-xs font-bold py-1 px-3 rounded">Completed</button>
                             </>
                             )}
-                            {task.status === TaskStatus.Done && <span className="text-gray-400 text-sm flex items-center justify-center">Completed</span>}
+                            {task.status === TaskStatus.Completed && <span className="text-gray-400 text-sm flex items-center justify-center">Completed</span>}
                             {/* Edit and Delete buttons - only for task assigner and CEO */}
                             {(canEditTask(task) || canDeleteTask(task)) && (
                                 <>
@@ -732,7 +732,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                             )}
                             
                             {/* Archive/Unarchive buttons - only for completed tasks */}
-                            {(task.status === TaskStatus.Done || task.status === TaskStatus.Completed) && (
+                            {(task.status === TaskStatus.Completed || task.status === TaskStatus.Completed) && (
                                 <button 
                                     onClick={() => onArchiveTask(task.id, !task.archived)}
                                     className={`hover:scale-110 transition-transform ${
@@ -827,10 +827,10 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                           {task.status === TaskStatus.InProgress && !task.timerStartTime && (
                           <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded">Resume</button>
                           )}
-                          <button onClick={() => handleMarkAsDone(task)} className="bg-primary-500 hover:bg-primary-600 text-white text-xs font-bold py-1 px-3 rounded">Done</button>
+                          <button onClick={() => handleMarkAsCompleted(task)} className="bg-primary-500 hover:bg-primary-600 text-white text-xs font-bold py-1 px-3 rounded">Completed</button>
                       </>
                       )}
-                      {task.status === TaskStatus.Done && <span className="text-gray-400 text-sm flex items-center justify-center">Completed</span>}
+                      {task.status === TaskStatus.Completed && <span className="text-gray-400 text-sm flex items-center justify-center">Completed</span>}
                       {/* Edit and Delete buttons - only for task assigner and CEO */}
                       {(canEditTask(task) || canDeleteTask(task)) && (
                           <>
@@ -848,7 +848,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                       )}
                       
                       {/* Archive/Unarchive buttons - only for completed tasks */}
-                      {(task.status === TaskStatus.Done || task.status === TaskStatus.Completed) && (
+                      {(task.status === TaskStatus.Completed || task.status === TaskStatus.Completed) && (
                           <button 
                               onClick={() => onArchiveTask(task.id, !task.archived)}
                               className={`hover:scale-110 transition-transform ${
@@ -940,10 +940,10 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                       {task.status === TaskStatus.InProgress && !task.timerStartTime && (
                       <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded">Resume</button>
                       )}
-                      <button onClick={() => handleMarkAsDone(task)} className="bg-primary-500 hover:bg-primary-600 text-white text-xs font-bold py-1 px-3 rounded">Done</button>
+                      <button onClick={() => handleMarkAsCompleted(task)} className="bg-primary-500 hover:bg-primary-600 text-white text-xs font-bold py-1 px-3 rounded">Completed</button>
                   </>
                   )}
-                  {task.status === TaskStatus.Done && <span className="text-gray-400 text-sm flex items-center justify-center">Completed</span>}
+                  {task.status === TaskStatus.Completed && <span className="text-gray-400 text-sm flex items-center justify-center">Completed</span>}
                   {/* Edit and Delete buttons - only for task assigner and CEO */}
                   {(canEditTask(task) || canDeleteTask(task)) && (
                       <>
@@ -961,7 +961,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                   )}
                   
                   {/* Archive/Unarchive buttons - only for completed tasks */}
-                  {(task.status === TaskStatus.Done || task.status === TaskStatus.Completed) && (
+                  {(task.status === TaskStatus.Completed || task.status === TaskStatus.Completed) && (
                       <button 
                           onClick={() => onArchiveTask(task.id, !task.archived)}
                           className={`hover:scale-110 transition-transform ${
@@ -1157,7 +1157,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                 </div>
 
                 <div className="flex justify-end pt-4">
-                    <button type="submit" className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Mark as Done</button>
+                    <button type="submit" className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Mark as Completed</button>
                 </div>
               </form>
             )}
@@ -1172,7 +1172,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
                         <span className="font-semibold text-white">"{taskToDelete.title}"</span>?
                     </p>
                     <p className="text-sm text-gray-400">
-                        This action cannot be undone.
+                        This action cannot be unCompleted.
                     </p>
                     
                     <div className="flex justify-end space-x-3 pt-4">

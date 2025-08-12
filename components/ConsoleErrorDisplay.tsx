@@ -83,7 +83,7 @@ export const ConsoleErrorDisplay: React.FC = () => {
     <Card className="mb-6">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-xl font-semibold text-white flex items-center space-x-2">
-          <div className="w-5 h-5 text-red-400">{ICONS.warning || '⚠️'}</div>
+          {/* <div className="w-5 h-5 text-red-400">{ICONS.warning || '⚠️'}</div> */}
           <span>Console Output ({errors.length})</span>
         </h3>
         <div className="flex space-x-2">
