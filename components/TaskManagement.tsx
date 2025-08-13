@@ -197,7 +197,7 @@ export const TaskManagement: React.FC<TaskManagementProps> = ({ tasks, projects,
       activeTasks: tasks.filter(t => !t.archived).length
     });
     
-    let filtered = tasks.filter(task => isManager || task.assignedToId === currentUser.id);
+    let filtered = tasks.filter(task => isManager || task.assignedToId === currentUser.id || task.assignedById === currentUser.id);
     console.log('👥 After permission filter:', filtered.length);
     
     // Apply archive filter - by default hide archived tasks unless showArchived is true
