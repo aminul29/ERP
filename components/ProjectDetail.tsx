@@ -8,10 +8,12 @@ import { StarRating } from './ui/StarRating';
 import { ICONS } from '../constants';
 import { Modal } from './ui/Modal';
 
-const statusColors: { [key in TaskStatus]: 'gray' | 'blue' | 'green' } = {
+const statusColors: { [key in TaskStatus]: 'gray' | 'blue' | 'green' | 'yellow' | 'red' } = {
   [TaskStatus.ToDo]: 'gray',
   [TaskStatus.InProgress]: 'blue',
-  [TaskStatus.Done]: 'green',
+  [TaskStatus.UnderReview]: 'yellow',
+  [TaskStatus.RevisionRequired]: 'red',
+  [TaskStatus.Completed]: 'green',
 };
 
 const priorityColors: { [key in TaskPriority]: 'green' | 'yellow' | 'red' } = {
@@ -109,7 +111,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, tasks, cl
 
     const isComplete = useMemo(() => {
         if (tasks.length === 0) return false;
-        return tasks.every(t => t.status === TaskStatus.Done);
+        return tasks.every(t => t.status === TaskStatus.Completed);
     }, [tasks]);
 
     const canRateAsAssigner = currentUser.id === project.createdById && isComplete;
@@ -123,7 +125,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, tasks, cl
     
     const progress = useMemo(() => {
         if (tasks.length === 0) return 0;
-        const completedTasks = tasks.filter(t => t.status === TaskStatus.Done).length;
+        const completedTasks = tasks.filter(t => t.status === TaskStatus.Completed).length;
         return Math.round((completedTasks / tasks.length) * 100);
     }, [tasks]);
 
@@ -294,7 +296,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, tasks, cl
       }
     };
 
-    const handleMarkAsDone = (task: Task) => {
+    const handleMarkAsCompleted = (task: Task) => {
       let taskToReport = { ...task };
       if (task.timerStartTime) {
           const elapsedSeconds = (new Date().getTime() - new Date(task.timerStartTime).getTime()) / 1000;
@@ -309,7 +311,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, tasks, cl
       if(reportingTask) {
           onUpdateTask({
               ...reportingTask,
-              status: TaskStatus.Done,
+              status: TaskStatus.Completed,
               completionReport: completionReport,
               workExperience: workExperience,
               suggestions: suggestions,
@@ -458,7 +460,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, tasks, cl
                                             <div className="flex items-center space-x-3 w-full sm:w-auto justify-between">
                                                 <Badge color={statusColors[task.status]}>{task.status}</Badge>
                                                 <div className="flex items-center space-x-2">
-                                                    {task.assignedToId === currentUser.id && task.status !== TaskStatus.Done && (
+                                                    {task.assignedToId === currentUser.id && task.status !== TaskStatus.Completed && (
                                                         <>
                                                             {task.status === TaskStatus.ToDo && (
                                                                 <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500/20 text-green-300 hover:bg-green-500/40 text-xs font-bold py-1 px-2 rounded">Start</button>
@@ -469,7 +471,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, tasks, cl
                                                             {task.status === TaskStatus.InProgress && !task.timerStartTime && (
                                                                 <button onClick={() => handleTimerAction(task, 'start')} className="bg-green-500/20 text-green-300 hover:bg-green-500/40 text-xs font-bold py-1 px-2 rounded">Resume</button>
                                                             )}
-                                                            <button onClick={() => handleMarkAsDone(task)} className="bg-primary-500/20 text-primary-300 hover:bg-primary-500/40 text-xs font-bold py-1 px-2 rounded">Done</button>
+                                                            <button onClick={() => handleMarkAsCompleted(task)} className="bg-primary-500/20 text-primary-300 hover:bg-primary-500/40 text-xs font-bold py-1 px-2 rounded">Completed</button>
                                                         </>
                                                     )}
                                                     {(isAssigner || isCeo) && (
@@ -654,7 +656,7 @@ export const ProjectDetail: React.FC<ProjectDetailProps> = ({ project, tasks, cl
                   </div>
                   
                   <div className="flex justify-end pt-4">
-                      <button type="submit" className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Mark as Done</button>
+                      <button type="submit" className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg">Mark as Completed</button>
                   </div>
                 </form>
               )}
